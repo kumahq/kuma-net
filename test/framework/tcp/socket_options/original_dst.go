@@ -24,6 +24,7 @@ func ParseOriginalDst(multiaddr [16]byte) *net.TCPAddr {
 func ExtractOriginalDst(conn *net.TCPConn) (*net.TCPAddr, error) {
 	file, err := conn.File()
 	if err != nil {
+		// TODO (bartsmykla): wrap the error maybe?
 		return nil, err
 	}
 
@@ -35,6 +36,7 @@ func ExtractOriginalDst(conn *net.TCPConn) (*net.TCPAddr, error) {
 			return nil, nil
 		}
 
+		// TODO (bartsmykla): wrap the error maybe?
 		return nil, err
 	}
 

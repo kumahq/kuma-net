@@ -2,55 +2,36 @@ package framework
 
 import (
 	"net"
-	"strconv"
-
-	. "github.com/onsi/gomega"
 
 	"github.com/kumahq/kuma-net/test/framework/tcp"
 )
 
+// ConfigTCPServer
+// TODO (bartsmykla): write description
 type ConfigTCPServer struct {
 	Host string `json:"host"`
 	Port uint16 `json:"port"`
 }
 
-func (c *ConfigTCPServer) Address() *net.TCPAddr {
-	port := strconv.Itoa(int(c.Port))
-	hostPort := net.JoinHostPort(c.Host, port)
-
-	address, err := net.ResolveTCPAddr(tcp.Network, hostPort)
-	Expect(err).To(BeNil())
-
-	return address
+// Address
+// TODO (bartsmykla): write description
+// TODO (bartsmykla): write tests maybe(?)
+func (c *ConfigTCPServer) Address() (*net.TCPAddr, error) {
+	return tcp.ResolveAddress(c.Host, c.Port)
 }
 
-func DefaultConfigTCPServer() *ConfigTCPServer {
-	return &ConfigTCPServer{
-		Host: "localhost",
-		Port: 7878,
-	}
-}
-
+// Config
+// TODO (bartsmykla): write description
 type Config struct {
-	TCPServer            *ConfigTCPServer
-	ExcludeInboundPorts  []uint16
-	ExcludeOutboundPorts []uint16
+	TCPServer            *ConfigTCPServer `json:"tcpServer"`
+	ExcludeInboundPorts  []uint16         `json:"excludeInboundPorts"`
+	ExcludeOutboundPorts []uint16         `json:"excludeOutboundPorts"`
 }
 
-func DefaultConfig() *Config {
-	return &Config{
-		TCPServer: DefaultConfigTCPServer(),
-	}
-}
-
+// ConfigRedirectTCPTrafficDefault
+// TODO (bartsmykla): write description
 type ConfigRedirectTCPTrafficDefault struct {
-	AmountOfPortsToTest uint `json:"amountOfPortsToTest"`
-	TCPServer           *ConfigTCPServer
-}
-
-func DefaultConfigRedirectTCPTrafficDefault() *ConfigRedirectTCPTrafficDefault {
-	return &ConfigRedirectTCPTrafficDefault{
-		AmountOfPortsToTest: 5,
-		TCPServer:           DefaultConfigTCPServer(),
-	}
+	// TODO (bartsmykla): write description
+	AmountOfPortsToTest uint             `json:"amountOfPortsToTest"`
+	TCPServer           *ConfigTCPServer `json:"tcpServer"`
 }

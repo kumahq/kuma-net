@@ -12,20 +12,16 @@ import (
 )
 
 func RedirectTCPTrafficDefault(config *framework.ConfigRedirectTCPTrafficDefault) {
-	Describe("Inbound TCP traffic from all ports", Offset(1), func() {
-		var server *tcp.Server
-
+	Describe("Inbound TCP traffic from all ports", func() {
 		BeforeEach(func() {
-			server = tcp.NewServer().
+			DeferCleanup(tcp.NewServer().
 				WithPort(config.TCPServer.Port).
 				WithHost(config.TCPServer.Host).
 				WithConnectionHandler(tcp.ReplyWithOriginalDestination).
-				Listen()
-
-			DeferCleanup(server.Close)
+				Listen().Close)
 		})
 
-		DescribeTable("should be redirected", Offset(1),
+		DescribeTable("should be redirected",
 			func(port uint16) {
 				client := tcp.NewClient().
 					WithHost(config.TCPServer.Host).
@@ -34,7 +30,10 @@ func RedirectTCPTrafficDefault(config *framework.ConfigRedirectTCPTrafficDefault
 				Expect(client.DialAndWaitForStringReply(tcp.ReadBytes)).
 					To(Equal(client.Address().String()))
 			},
-			EntryDescription(fmt.Sprintf("to port %d, from %%d", config.TCPServer.Port)),
+			EntryDescription(fmt.Sprintf(
+				"to port %d, from port %%d",
+				config.TCPServer.Port,
+			)),
 			func() []TableEntry {
 				var entries []TableEntry
 

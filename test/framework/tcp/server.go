@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"time"
 
 	"github.com/kumahq/kuma-net/test/framework/tcp/socket_options"
 )
@@ -35,12 +33,14 @@ type Server struct {
 	port             *uint16
 	listener         *net.TCPListener
 	handleConnection ConnectionHandler
+	errorsC          chan error
 }
 
 func NewServer() *Server {
 	return &Server{
 		host:             "localhost",
 		handleConnection: NoopConnectionHandler,
+		errorsC:          make(chan error),
 	}
 }
 
@@ -56,36 +56,61 @@ func (s *Server) WithPort(port uint16) *Server {
 	return s
 }
 
-func (s *Server) WithConnectionHandler(connectionHandler ConnectionHandler) *Server {
-	s.handleConnection = connectionHandler
+func (s *Server) WithConnectionHandler(handleConn ConnectionHandler) *Server {
+	s.handleConnection = handleConn
 
 	return s
 }
 
-func (s *Server) Listen() *Server {
+func (s *Server) Listen() (*Server, error) {
 	port := strconv.Itoa(int(*s.port))
 	hostPort := net.JoinHostPort(s.host, port)
 
 	address, err := net.ResolveTCPAddr(Network, hostPort)
-	Expect(err).To(BeNil())
+	if err != nil {
+		// TODO: Think if not to wrap the error
+		return nil, err
+	}
 
 	listener, err := net.ListenTCP(Network, address)
-	Expect(err).To(BeNil())
+	if err != nil {
+		// TODO: Think if not to wrap the error
+		return nil, err
+	}
 
 	s.listener = listener
 
 	go func() {
-		defer GinkgoRecover()
-
 		conn, err := listener.AcceptTCP()
-		Expect(err).To(BeNil())
+		if err != nil {
+			// TODO: Think if not to wrap the error
+			s.errorsC <- err
+		}
 
-		Expect(s.handleConnection(conn)).To(Succeed())
+		if err := s.handleConnection(conn); err != nil {
+			// TODO: Think if not to wrap the error
+			s.errorsC <- err
+		}
+
+		close(s.errorsC)
 	}()
 
-	return s
+	return s, nil
 }
 
 func (s *Server) Close() error {
-	return s.listener.Close()
+	if err := s.listener.Close(); err != nil {
+		return fmt.Errorf("closing of the listener failed: %s", err)
+	}
+
+	t := time.NewTimer(time.Second)
+
+	select {
+	case <-t.C:
+		// TODO: improve error message
+		return fmt.Errorf("close timeout")
+	case err := <-s.errorsC:
+		// TODO: Think if not to wrap the error
+		return err
+	}
 }

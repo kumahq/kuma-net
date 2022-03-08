@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-
-	. "github.com/onsi/gomega"
 )
 
 type ClientConnectionHandler func(conn *net.TCPConn) ([]byte, error)
@@ -49,39 +47,63 @@ func (c *Client) WithPort(port uint16) *Client {
 }
 
 func (c *Client) Address() *net.TCPAddr {
-	Expect(c.address).ToNot(BeNil())
-
 	return c.address
 }
 
-func (c *Client) Dial() *net.TCPConn {
-	Expect(c.port).ToNot(BeNil())
-	Expect(c.host).ToNot(BeEmpty())
+func (c *Client) Dial() (*net.TCPConn, error) {
+	if c.port == nil {
+		return nil, fmt.Errorf("missing port")
+	}
+
+	if c.host == "" {
+		return nil, fmt.Errorf("missing host")
+	}
 
 	port := strconv.Itoa(int(*c.port))
 	hostPort := net.JoinHostPort(c.host, port)
 
 	address, err := net.ResolveTCPAddr(Network, hostPort)
-	Expect(err).To(BeNil())
+	if err != nil {
+		return nil, fmt.Errorf(
+			"cannot resolve TCP address from provided host and port (%s:%d): %s",
+			c.host,
+			*c.port,
+			err,
+		)
+	}
 	c.address = address
 
 	connection, err := net.DialTCP(Network, nil, address)
-	Expect(err).To(BeNil())
+	if err != nil {
+		return nil, fmt.Errorf("error when dialling a TCP server (%s): %s", address, err)
+	}
 	c.connection = connection
 
-	return connection
+	return connection, nil
 }
 
 func (c *Client) DialAndWaitForReply(
-	handleConnection ClientConnectionHandler,
+	handleConn ClientConnectionHandler,
 ) ([]byte, error) {
-	return handleConnection(c.Dial())
+	conn, err := c.Dial()
+	if err != nil {
+		// TODO: think if not to wrap the error
+		return nil, err
+	}
+
+	return handleConn(conn)
 }
 
 func (c *Client) DialAndWaitForStringReply(
 	handleConnection ClientConnectionHandler,
 ) (string, error) {
-	bs, err := handleConnection(c.Dial())
+	conn, err := c.Dial()
+	if err != nil {
+		// TODO: think if not to wrap the error
+		return "", err
+	}
+
+	bs, err := handleConnection(conn)
 	if err != nil {
 		return "", fmt.Errorf("cannot handle connection: %s", err)
 	}

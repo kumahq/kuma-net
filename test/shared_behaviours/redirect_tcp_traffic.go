@@ -14,11 +14,14 @@ import (
 func RedirectTCPTrafficDefault(config *framework.ConfigRedirectTCPTrafficDefault) {
 	Describe("Inbound TCP traffic from all ports", func() {
 		BeforeEach(func() {
-			DeferCleanup(tcp.NewServer().
+			server, err := tcp.NewServer().
 				WithPort(config.TCPServer.Port).
 				WithHost(config.TCPServer.Host).
 				WithConnectionHandler(tcp.ReplyWithOriginalDestination).
-				Listen().Close)
+				Listen()
+			Expect(err).To(BeNil())
+
+			DeferCleanup(server.Close)
 		})
 
 		DescribeTable("should be redirected",

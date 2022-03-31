@@ -1,34 +1,68 @@
 package builder
 
 import (
+	"fmt"
+	"net"
+
 	. "github.com/kumahq/kuma-net/iptables/builder/chain"
 	"github.com/kumahq/kuma-net/iptables/builder/config"
 	. "github.com/kumahq/kuma-net/iptables/builder/rule"
 	"github.com/kumahq/kuma-net/iptables/builder/table"
 	. "github.com/kumahq/kuma-net/iptables/builder/target"
+	. "github.com/kumahq/kuma-net/iptables/consts"
 	. "github.com/kumahq/kuma-net/iptables/parameters"
-)
-
-// TODO (bartsmykla): move it to some better suited place (consts.go maybe?)
-const (
-	DNSPort   uint16 = 53
-	Localhost        = "127.0.0.1/32"
-	Loopback         = "lo"
-	// InboundPassthroughIPv4SourceAddress
-	// TODO (bartsmykla): add some description
-	InboundPassthroughIPv4SourceAddress = "127.0.0.6/32"
 )
 
 type IPTables struct {
 	tables []*table.TableBuilder
 }
 
-//goland:noinspection GoSnakeCaseUsage
-func Build(config *config.Config) string {
-	inbound := config.Tables.Nat.MeshInbound.Name
-	outbound := config.Tables.Nat.MeshOutbound.Name
-	inboundRedirect := config.Tables.Nat.MeshInboundRedirect.Name
-	outboundRedirect := config.Tables.Nat.MeshOutboundRedirect.Name
+func getLoopback() (*net.Interface, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("listig network interfaces failed: %s", err)
+	}
+
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			return &iface, nil
+		}
+	}
+
+	return nil, fmt.Errorf("it appears there is no loopback interface")
+}
+
+func getInterfaceIPv4Address(iface *net.Interface) (string, error) {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return "", fmt.Errorf("cannot obtain interface addresses: %s", err)
+	}
+
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok {
+			return "", fmt.Errorf(
+				"ip appears at leas one of the interface addresses is non IP: %s\t%T",
+				addr,
+				addr,
+			)
+		}
+
+		if ipNet.IP.To4() != nil {
+			return ipNet.IP.Mask(net.CIDRMask(32, 32)).String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("it appears interface has no IPv4 address")
+}
+
+func Build(config *config.Config) (string, error) {
+	loopbackIface, err := getLoopback()
+	if err != nil {
+		return "", fmt.Errorf("cannot obtain loopback interface: %s", err)
+	}
+
+	loopback := loopbackIface.Name
 
 	inboundRedirectPort := config.Redirect.Inbound.Port
 	outboundRedirectPort := config.Redirect.Outbound.Port
@@ -36,31 +70,32 @@ func Build(config *config.Config) string {
 	uid := config.Owner.UID
 	gid := config.Owner.GID
 
-	shouldRedirectInbound := config.Redirect.Inbound.Enabled
-	shouldRedirectOutbound := config.Redirect.Outbound.Enabled
 	shouldRedirectDNS := config.Redirect.DNS.Enabled
 
 	nat := table.Nat()
 
-	MESH_INBOUND_REDIRECT := NewChain(inboundRedirect).
-		Append(Match(TCP()).Then(Redirect(To(Ports(inboundRedirectPort))))).
-		If(shouldRedirectInbound)
-
-	MESH_INBOUND := NewChain(inbound).
-		Append(Match(TCP()).Then(Redirect(To(MESH_INBOUND_REDIRECT)))).
-		If(shouldRedirectInbound)
-
-	MESH_OUTBOUND_REDIRECT := NewChain(outboundRedirect).
+	// KUMA_MESH_INBOUND_REDIRECT
+	meshInboundRedirect := NewChain(config.Chains.MeshInboundRedirect.GetFullName()).
 		Append(Match(TCP()).
-			Then(Redirect(To(Ports(outboundRedirectPort))))).
-		If(shouldRedirectOutbound)
+			Then(Redirect(To(Ports(inboundRedirectPort)))))
 
-	MESH_OUTBOUND := NewChain(outbound).
+	// KUMA_MESH_INBOUND
+	meshInbound := NewChain(config.Chains.MeshInbound.GetFullName()).
+		Append(Match(TCP()).
+			Then(Redirect(To(meshInboundRedirect))))
+
+	// KUMA_MESH_OUTBOUND_REDIRECT
+	meshOutboundRedirect := NewChain(config.Chains.MeshOutboundRedirect.GetFullName()).
+		Append(Match(TCP()).
+			Then(Redirect(To(Ports(outboundRedirectPort)))))
+
+	// KUMA_MESH_OUTBOUND
+	meshOutbound := NewChain(config.Chains.MeshOutbound.GetFullName()).
 		// when tcp_packet to 192.168.0.10:7777 arrives ⤸
 		// iptables#nat
 		//   PREROUTING ⤸
-		//   MESH_INBOUND ⤸
-		//   MESH_INBOUND_REDIRECT ⤸
+		//   KUMA_MESH_INBOUND ⤸
+		//   KUMA_MESH_INBOUND_REDIRECT ⤸
 		// envoy@15006 ⤸
 		//   listener#inbound:passthrough:ipv4 ⤸
 		//   cluster#inbound:passthrough:ipv4 (source_ip 127.0.0.6) ⤸
@@ -68,27 +103,25 @@ func Build(config *config.Config) string {
 		//   cluster#localhost:7777 ⤸
 		// localhost:7777
 		Append(Match(Source(InboundPassthroughIPv4SourceAddress),
-			OutInterface(Loopback)).
+			OutInterface(loopback)).
 			Then(Return)).
 		Append(Match(TCP(Not(DestinationPort(DNSPort))).If(shouldRedirectDNS),
 			Not(Destination(Localhost)),
 			Owner(UID(uid)),
-			OutInterface(Loopback)).
-			Then(Redirect(To(MESH_INBOUND_REDIRECT))).
-			If(shouldRedirectInbound)).
+			OutInterface(loopback)).
+			Then(Redirect(To(meshInboundRedirect)))).
 		Append(Match(TCP(Not(DestinationPort(DNSPort))).If(shouldRedirectDNS),
-			OutInterface(Loopback),
+			OutInterface(loopback),
 			Owner(Not(UID(uid)))).
 			Then(Return)).
 		Append(Match(Owner(UID(uid))).
 			Then(Return)).
 		Append(Match(Not(Destination(Localhost)),
-			OutInterface(Loopback),
+			OutInterface(loopback),
 			Owner(GID(gid))).
-			Then(Redirect(To(MESH_INBOUND_REDIRECT))).
-			If(shouldRedirectInbound)).
+			Then(Redirect(To(meshInboundRedirect)))).
 		Append(Match(TCP(Not(DestinationPort(DNSPort))).If(shouldRedirectDNS),
-			OutInterface(Loopback),
+			OutInterface(loopback),
 			Owner(Not(GID(gid)))).
 			Then(Return)).
 		Append(Match(Owner(GID(gid))).
@@ -99,12 +132,11 @@ func Build(config *config.Config) string {
 		Append(Match(Destination(Localhost)).
 			Then(Return)).
 		Append(Match().
-			Then(Redirect(To(MESH_OUTBOUND_REDIRECT))).
-			If(shouldRedirectOutbound))
+			Then(Redirect(To(meshOutboundRedirect))))
 
 	nat.Prerouting().
-		Append(Match(TCP()).Then(Redirect(To(MESH_INBOUND)))).
-		If(shouldRedirectInbound)
+		Append(Match(TCP()).
+			Then(Redirect(To(meshInbound))))
 
 	nat.Output().
 		Append(Match(UDP(DestinationPort(DNSPort)), Owner(UID(uid))).
@@ -117,21 +149,12 @@ func Build(config *config.Config) string {
 			Then(Redirect(Ports(dnsRedirectPort))).
 			If(shouldRedirectDNS)).
 		Append(Match(TCP()).
-			Then(Redirect(To(MESH_OUTBOUND))).
-			If(shouldRedirectOutbound))
-
-	// TODO (bartsmykla): currently it assumes that outbound redirection is enabled,
-	//  but maybe we should allow to redirect DNS traffic even if we don't want to
-	//  redirect any other traffic?
-
-	// TODO (bartsmykla): some parameters (--source for example) should result in
-	//  multiple rules when provided more addresses instead of doing it in one
-	//  make sure to handle it properly
+			Then(Redirect(To(meshOutbound))))
 
 	return nat.
-		Chain(MESH_INBOUND).
-		Chain(MESH_OUTBOUND).
-		Chain(MESH_INBOUND_REDIRECT).
-		Chain(MESH_OUTBOUND_REDIRECT).
-		Build(config.Verbose)
+		AddChain(meshInbound).
+		AddChain(meshOutbound).
+		AddChain(meshInboundRedirect).
+		AddChain(meshOutboundRedirect).
+		Build(config.Verbose), nil
 }

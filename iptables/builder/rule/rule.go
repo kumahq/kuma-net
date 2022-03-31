@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kumahq/kuma-net/iptables/builder/target"
+	. "github.com/kumahq/kuma-net/iptables/consts"
 	"github.com/kumahq/kuma-net/iptables/parameters"
 )
 
@@ -22,28 +23,10 @@ const (
 	Append Kind = iota
 )
 
-// TODO (bartsmykla): move it somewhere more appropriate?
-const (
-	Long  = true
-	Short = false
-)
-
-var flags = map[string]map[bool]string{
-	"append": {
-		Long:  "--append",
-		Short: "-A",
-	},
-	"jump": {
-		Long:  "--jump",
-		Short: "-j",
-	},
-}
-
 func (k Kind) Build(verbose bool) string {
-	return flags[k.String()][verbose]
+	return Flags[k.String()][verbose]
 }
 
-//goland:noinspection GoNameStartsWithPackageName
 type RuleBuilder struct {
 	kind   Kind
 	chain  string
@@ -72,7 +55,7 @@ func (b RuleBuilder) Build(verbose bool) string {
 	}
 
 	if b.target != nil {
-		rule = append(rule, flags["jump"][verbose])
+		rule = append(rule, Flags["jump"][verbose])
 		rule = append(rule, b.target()...)
 	}
 

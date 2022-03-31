@@ -10,7 +10,7 @@ type General struct{}
 // a plain number, specifying the number of 1's on the left side of the network mask.
 // Thus, an iptables mask of 24 is equivalent to 255.255.255.0
 //
-// ref. iptables(8)#PARAMETERS
+// ref. iptables(8) > PARAMETERS
 func Source(address string) Parameters[General] {
 	return newParameters[General]("--source", "-s", address)
 }
@@ -18,7 +18,7 @@ func Source(address string) Parameters[General] {
 // Destination will generate arguments for the "-d, --destination address[/mask]" flag
 // See the description of the -s (source) flag for a detailed description of the syntax
 //
-// ref. iptables(8)#PARAMETERS
+// ref. iptables(8) > PARAMETERS
 func Destination(address string) Parameters[General] {
 	return newParameters[General]("--destination", "-d", address)
 }
@@ -28,7 +28,7 @@ func Destination(address string) Parameters[General] {
 // OUTPUT and POSTROUTING chains). If the interface name ends in a "+", then any interface
 // which begins with this name will match
 //
-// ref. iptables(8)#PARAMETERS
+// ref. iptables(8) > PARAMETERS
 func OutInterface(name string) Parameters[General] {
 	return newParameters[General]("--out-interface", "-o", name)
 }

@@ -4,9 +4,6 @@ import (
 	"github.com/kumahq/kuma-net/iptables/builder/rule"
 )
 
-// TODO (bartsmykla): add validation for built-in chains as they are predefined, and cannot
-//  be changed
-
 type ChainBuilder struct {
 	name  string
 	rules []rule.RuleBuilder

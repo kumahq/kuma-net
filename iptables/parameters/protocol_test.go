@@ -1,80 +1,78 @@
 package parameters_test
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kumahq/kuma-net/iptables/parameters"
+	. "github.com/kumahq/kuma-net/iptables/parameters"
 )
 
-var _ = Describe("TCP", func() {
-	verbose := true
+var _ = Describe("ProtocolParameter", func() {
+	Describe("Protocol", func() {
+		DescribeTable("DestinationPort",
+			func(port int, verbose bool, want string) {
+				// when
+				got := DestinationPort(uint16(port)).Build(verbose)
 
-	It("should generate '--protocol tcp' when no protocol options provided", func() {
-		Expect(parameters.TCP().Build(verbose)).To(Equal("--protocol tcp"))
-	})
-
-	It("should generate '! --protocol tcp' when negated and no options provided", func() {
-		Expect(parameters.TCP().Negate().Build(verbose)).To(Equal("! --protocol tcp"))
-	})
-
-	It("should generate '--protocol tcp' and '--match tcp' with provided options", func() {
-		// given
-		destinationPort := parameters.DestinationPort(1234)
-		sourcePort := parameters.SourcePort(5678)
-
-		// when
-		got := parameters.TCP(destinationPort, sourcePort).Build(verbose)
-
-		// then
-		want := fmt.Sprintf(
-			"--protocol tcp --match tcp %s %s",
-			destinationPort.Build(verbose),
-			sourcePort.Build(verbose),
+				// then
+				Expect(got).To(Equal(want))
+			},
+			Entry(nil, 22, false, "--dport 22"),
+			Entry(nil, 22, true, "--destination-port 22"),
+			Entry(nil, 7777, false, "--dport 7777"),
+			Entry(nil, 7777, true, "--destination-port 7777"),
 		)
 
-		Expect(got).To(Equal(want))
-	})
-})
+		DescribeTable("NotDestinationPort",
+			func(port int, verbose bool, want string) {
+				// when
+				got := NotDestinationPort(uint16(port)).Build(verbose)
 
-var _ = Describe("Protocol", func() {
-	verbose := true
+				// then
+				Expect(got).To(Equal(want))
+			},
+			Entry(nil, 22, false, "! --dport 22"),
+			Entry(nil, 22, true, "! --destination-port 22"),
+			Entry(nil, 7777, false, "! --dport 7777"),
+			Entry(nil, 7777, true, "! --destination-port 7777"),
+		)
 
-	Describe("DestinationPort", func() {
-		It("should generate '--destination-port' with provided port", func() {
-			// when
-			got := parameters.DestinationPort(7777).Build(verbose)
+		Describe("NotDestinationPortIf", func() {
+			It("should return nil, when predicate returns false", func() {
+				Expect(NotDestinationPortIf(func() bool {
+					return false
+				}, 22)).To(BeNil())
+			})
 
-			// then
-			Expect(got).To(Equal("--destination-port 7777"))
+			// TODO (bartsmykla): add cases when predicate returns true
 		})
 
-		It("should generate '! --destination-port' with provided port when negated", func() {
-			// when
-			got := parameters.DestinationPort(7777).Negate().Build(verbose)
+		DescribeTable("Tcp",
+			func(parameters []*TcpUdpParameter, verbose bool, want string) {
+				// when
+				got := Tcp(parameters...).Build(verbose)
 
-			// then
-			Expect(got).To(Equal("! --destination-port 7777"))
-		})
-	})
-
-	Describe("SourcePort", func() {
-		It("should generate '--source-port' with provided port", func() {
-			// when
-			got := parameters.SourcePort(7777).Build(verbose)
-
-			// then
-			Expect(got).To(Equal("--source-port 7777"))
-		})
-
-		It("should generate '! --source-port' with provided port when negated", func() {
-			// when
-			got := parameters.SourcePort(7777).Negate().Build(verbose)
-
-			// then
-			Expect(got).To(Equal("! --source-port 7777"))
-		})
+				// then
+				Expect(got).To(Equal(want))
+			},
+			Entry(nil, nil, false, "tcp"),
+			Entry(nil, nil, true, "tcp"),
+			Entry(nil, []*TcpUdpParameter{DestinationPort(22)}, false, "tcp --dport 22"),
+			Entry(nil,
+				[]*TcpUdpParameter{DestinationPort(22)},
+				true,
+				"tcp --destination-port 22",
+			),
+			Entry(nil,
+				[]*TcpUdpParameter{NotDestinationPort(22)},
+				false,
+				"tcp ! --dport 22",
+			),
+			Entry(nil,
+				[]*TcpUdpParameter{NotDestinationPort(22)},
+				true,
+				"tcp ! --destination-port 22",
+			),
+		)
 	})
 })

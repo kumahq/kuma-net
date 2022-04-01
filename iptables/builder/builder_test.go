@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kumahq/kuma-net/iptables/builder"
-	"github.com/kumahq/kuma-net/iptables/builder/config"
+	"github.com/kumahq/kuma-net/iptables/config"
 )
 
 var _ = Describe("IPTables Builder", func() {

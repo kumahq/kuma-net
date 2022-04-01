@@ -1,6 +1,6 @@
 module github.com/kumahq/kuma-net
 
-go 1.18
+go 1.17
 
 require (
 	github.com/onsi/ginkgo/v2 v2.1.3

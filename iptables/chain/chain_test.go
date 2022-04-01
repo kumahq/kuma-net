@@ -5,11 +5,13 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kumahq/kuma-net/iptables/builder/chain"
+
+	chain2 "github.com/kumahq/kuma-net/iptables/chain"
 )
 
 var _ = Describe("WithChain", func() {
 	DescribeTable("WithChain",
-		func(builder *chain.ChainBuilder, rules []string) {
+		func(builder *chain2.Chain, rules []string) {
 			// when
 			got := builder.Build(false)
 
@@ -25,6 +27,6 @@ var _ = Describe("WithChain", func() {
 		Entry("should be able to generate POSTROUTING built-in chain without any rules",
 			chain.Postrouting(), nil),
 		Entry("should be able to generate new custom chain without any rules",
-			chain.NewChain("FOO_BAR_BAZ"), nil),
+			chain2.NewChain("FOO_BAR_BAZ"), nil),
 	)
 })

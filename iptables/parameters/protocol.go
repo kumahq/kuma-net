@@ -2,47 +2,138 @@ package parameters
 
 import (
 	"strconv"
+	"strings"
 )
 
-type Protocol struct{}
+type ProtocolParameter struct {
+	name       string
+	parameters []ParameterBuilder
+	negative   bool
+}
 
-func protocolMatcher(protocol string, parameters ...Parameters[Protocol]) Parameters[Protocol] {
-	// As with introduction of If() methods option can be nil, when if predicate returns false,
-	// we have to filter out parameters
-	var filtered []Parameters[Protocol]
-	for _, params := range parameters {
-		filtered = append(filtered, params)
+func (p *ProtocolParameter) Build(verbose bool) string {
+	result := []string{p.name}
+
+	// If the -p or --protocol was specified and if and only if an unknown option is encountered,
+	// iptables will try load a match module of the same name as the protocol, to try making
+	// the option available.
+	for _, parameter := range p.parameters {
+		if parameter != nil {
+			result = append(result, parameter.Build(verbose))
+		}
 	}
 
-	finalParameters := newParameters[Protocol]("--protocol", "-p", protocol)
+	return strings.Join(result, " ")
+}
 
-	// If we want to specify --destination-port | --dport, --source-port | --sport
-	// or other tcp, or udp specific configuration we have to add --match | -m tcp flag
-	// ref. iptables-extensions(8) > tcp
-	// ref. iptables-extensions(8) > udp
-	if len(filtered) > 0 {
-		finalParameters = finalParameters.append("--match", "-m", protocol, false)
+func (p *ProtocolParameter) Negate() ParameterBuilder {
+	for _, parameter := range p.parameters {
+		parameter.Negate()
 	}
 
-	for _, params := range filtered {
-		finalParameters = finalParameters.concat(params)
+	return p
+}
+
+type TcpUdpParameter struct {
+	long     string
+	short    string
+	value    string
+	negative bool
+}
+
+func (p *TcpUdpParameter) Build(verbose bool) string {
+	flag := p.short
+
+	if verbose {
+		flag = p.long
 	}
 
-	return finalParameters
+	result := []string{flag}
+
+	if p.negative {
+		result = append([]string{"!"}, result...)
+	}
+
+	result = append(result, p.value)
+
+	return strings.Join(result, " ")
 }
 
-func TCP(opts ...Parameters[Protocol]) Parameters[Protocol] {
-	return protocolMatcher("tcp", opts...)
+func (p *TcpUdpParameter) Negate() ParameterBuilder {
+	p.negative = !p.negative
+
+	return p
 }
 
-func UDP(opts ...Parameters[Protocol]) Parameters[Protocol] {
-	return protocolMatcher("udp", opts...)
+func destinationPort(port uint16, negative bool) *TcpUdpParameter {
+	return &TcpUdpParameter{
+		long:     "--destination-port",
+		short:    "--dport",
+		value:    strconv.Itoa(int(port)),
+		negative: negative,
+	}
 }
 
-func SourcePort(port uint16) Parameters[Protocol] {
-	return newParameters[Protocol]("--source-port", "--sport", strconv.Itoa(int(port)))
+func DestinationPort(port uint16) *TcpUdpParameter {
+	return destinationPort(port, false)
 }
 
-func DestinationPort(port uint16) Parameters[Protocol] {
-	return newParameters[Protocol]("--destination-port", "--dport", strconv.Itoa(int(port)))
+func NotDestinationPort(port uint16) *TcpUdpParameter {
+	return destinationPort(port, true)
+}
+
+func NotDestinationPortIf(predicate func() bool, port uint16) *TcpUdpParameter {
+	if predicate() {
+		return destinationPort(port, true)
+	}
+
+	return nil
+}
+
+func Udp(udpParameters ...*TcpUdpParameter) *ProtocolParameter {
+	var parameters []ParameterBuilder
+
+	for _, parameter := range udpParameters {
+		if parameter != nil {
+			parameters = append(parameters, parameter)
+		}
+	}
+
+	return &ProtocolParameter{
+		name:       "udp",
+		parameters: parameters,
+	}
+}
+
+func tcp(
+	addParameters bool,
+	tcpParameters []*TcpUdpParameter,
+) *ProtocolParameter {
+	var parameters []ParameterBuilder
+
+	if addParameters {
+		for _, parameter := range tcpParameters {
+			if parameter != nil {
+				parameters = append(parameters, parameter)
+			}
+		}
+	}
+
+	return &ProtocolParameter{
+		name:       "tcp",
+		parameters: parameters,
+	}
+}
+
+func Tcp(tcpParameters ...*TcpUdpParameter) *ProtocolParameter {
+	return tcp(true, tcpParameters)
+}
+
+func Protocol(parameter *ProtocolParameter) *Parameter {
+	return &Parameter{
+		long:       "--protocol",
+		short:      "-p",
+		parameters: []ParameterBuilder{parameter},
+		negate:     negateSelf,
+	}
 }

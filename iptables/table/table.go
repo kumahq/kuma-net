@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kumahq/kuma-net/iptables/builder/chain"
+	"github.com/kumahq/kuma-net/iptables/chain"
 	. "github.com/kumahq/kuma-net/iptables/consts"
 )
 
 type TableBuilder struct {
 	name string
 
-	newChains []*chain.ChainBuilder
-	chains    []*chain.ChainBuilder
+	newChains []*chain.Chain
+	chains    []*chain.Chain
 }
 
 // Build
@@ -29,7 +29,7 @@ func (b *TableBuilder) Build(verbose bool) string {
 	}
 
 	for _, c := range b.newChains {
-		newChainLines = append(newChainLines, fmt.Sprintf("%s %s", Flags["new-chain"][verbose], c.String()))
+		newChainLines = append(newChainLines, fmt.Sprintf("%s %s", Flags["new-chain"][verbose], c.Name()))
 		rules := c.Build(verbose)
 		ruleLines = append(ruleLines, rules...)
 	}
@@ -69,32 +69,32 @@ func (b *TableBuilder) Build(verbose bool) string {
 }
 
 type NatTable struct {
-	prerouting  *chain.ChainBuilder
-	input       *chain.ChainBuilder
-	output      *chain.ChainBuilder
-	postrouting *chain.ChainBuilder
+	prerouting  *chain.Chain
+	input       *chain.Chain
+	output      *chain.Chain
+	postrouting *chain.Chain
 
 	// custom chains
-	chains []*chain.ChainBuilder
+	chains []*chain.Chain
 }
 
-func (t *NatTable) Prerouting() *chain.ChainBuilder {
+func (t *NatTable) Prerouting() *chain.Chain {
 	return t.prerouting
 }
 
-func (t *NatTable) Input() *chain.ChainBuilder {
+func (t *NatTable) Input() *chain.Chain {
 	return t.input
 }
 
-func (t *NatTable) Output() *chain.ChainBuilder {
+func (t *NatTable) Output() *chain.Chain {
 	return t.output
 }
 
-func (t *NatTable) Postrouting() *chain.ChainBuilder {
+func (t *NatTable) Postrouting() *chain.Chain {
 	return t.postrouting
 }
 
-func (t *NatTable) AddChain(chain *chain.ChainBuilder) *NatTable {
+func (t *NatTable) WithChain(chain *chain.Chain) *NatTable {
 	t.chains = append(t.chains, chain)
 
 	return t
@@ -104,7 +104,7 @@ func (t *NatTable) Build(verbose bool) string {
 	table := &TableBuilder{
 		name:      "nat",
 		newChains: t.chains,
-		chains: []*chain.ChainBuilder{
+		chains: []*chain.Chain{
 			t.prerouting,
 			t.input,
 			t.output,

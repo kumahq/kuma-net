@@ -16,7 +16,9 @@ func (p *ProtocolParameter) Build(verbose bool) string {
 
 	// If the -p or --protocol was specified and if and only if an unknown option is encountered,
 	// iptables will try load a match module of the same name as the protocol, to try making
-	// the option available.
+	// the option available, so we don't have to add --match tcp or -m tcp parameters to the rule
+	//
+	// ref. iptables-extensions(8) > MATCH EXTENSIONS
 	for _, parameter := range p.parameters {
 		if parameter != nil {
 			result = append(result, parameter.Build(verbose))
@@ -90,43 +92,27 @@ func NotDestinationPortIf(predicate func() bool, port uint16) *TcpUdpParameter {
 	return nil
 }
 
-func Udp(udpParameters ...*TcpUdpParameter) *ProtocolParameter {
+func tcpUdp(proto string, params []*TcpUdpParameter) *ProtocolParameter {
 	var parameters []ParameterBuilder
 
-	for _, parameter := range udpParameters {
+	for _, parameter := range params {
 		if parameter != nil {
 			parameters = append(parameters, parameter)
 		}
 	}
 
 	return &ProtocolParameter{
-		name:       "udp",
+		name:       proto,
 		parameters: parameters,
 	}
 }
 
-func tcp(
-	addParameters bool,
-	tcpParameters []*TcpUdpParameter,
-) *ProtocolParameter {
-	var parameters []ParameterBuilder
-
-	if addParameters {
-		for _, parameter := range tcpParameters {
-			if parameter != nil {
-				parameters = append(parameters, parameter)
-			}
-		}
-	}
-
-	return &ProtocolParameter{
-		name:       "tcp",
-		parameters: parameters,
-	}
+func Udp(udpParameters ...*TcpUdpParameter) *ProtocolParameter {
+	return tcpUdp("udp", udpParameters)
 }
 
 func Tcp(tcpParameters ...*TcpUdpParameter) *ProtocolParameter {
-	return tcp(true, tcpParameters)
+	return tcpUdp("tcp", tcpParameters)
 }
 
 func Protocol(parameter *ProtocolParameter) *Parameter {

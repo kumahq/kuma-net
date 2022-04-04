@@ -13,7 +13,7 @@ type IPTables struct {
 	nat *table.NatTable
 }
 
-func NewIPTables(raw *table.RawTable, nat *table.NatTable) *IPTables {
+func newIPTables(raw *table.RawTable, nat *table.NatTable) *IPTables {
 	return &IPTables{
 		raw: raw,
 		nat: nat,
@@ -40,13 +40,13 @@ func (t *IPTables) Build(verbose bool) string {
 	return strings.Join(tables, "\n")
 }
 
-func Build(config *config.Config) (string, error) {
+func BuildIPTables(config *config.Config) (string, error) {
 	loopbackIface, err := getLoopback()
 	if err != nil {
 		return "", fmt.Errorf("cannot obtain loopback interface: %s", err)
 	}
 
-	return NewIPTables(
+	return newIPTables(
 		buildRawTable(config),
 		buildNatTable(config, loopbackIface.Name),
 	).Build(config.Verbose), nil

@@ -14,12 +14,9 @@ type TrafficFlow struct {
 }
 
 type DNS struct {
-	enabled bool
-	Port    uint16
-}
-
-func (r *DNS) Enabled() bool {
-	return r.enabled
+	Enabled            bool
+	Port               uint16
+	ConntrackZoneSplit bool
 }
 
 type Redirect struct {
@@ -76,7 +73,7 @@ func DefaultConfig() *Config {
 				RedirectChain: &Chain{Name: "MESH_OUTBOUND_REDIRECT"},
 				ExcludePorts:  []uint16{},
 			},
-			DNS: &DNS{Port: 15053, enabled: false},
+			DNS: &DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: true},
 		},
 		Verbose: true,
 	}

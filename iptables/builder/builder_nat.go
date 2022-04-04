@@ -32,7 +32,7 @@ func buildMeshOutbound(cfg *config.Config, loopback string) *Chain {
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName()
 	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName()
 	excludePorts := cfg.Redirect.Outbound.ExcludePorts
-	shouldRedirectDNS := cfg.Redirect.DNS.Enabled
+	shouldRedirectDNS := func() bool { return cfg.Redirect.DNS.Enabled }
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
 	gid := cfg.Owner.GID
@@ -133,7 +133,7 @@ func buildNatTable(cfg *config.Config, loopback string) *table.NatTable {
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
 	gid := cfg.Owner.GID
-	shouldRedirectDNS := cfg.Redirect.DNS.Enabled
+	shouldRedirectDNS := func() bool { return cfg.Redirect.DNS.Enabled }
 
 	nat := table.Nat()
 

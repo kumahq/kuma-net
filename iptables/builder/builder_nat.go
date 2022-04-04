@@ -8,8 +8,8 @@ import (
 	"github.com/kumahq/kuma-net/iptables/table"
 )
 
-func buildMeshInbound(cfg *config.TrafficFlow, meshInboundRedirect string) *Chain {
-	meshInbound := NewChain(cfg.Chain.GetFullName())
+func buildMeshInbound(cfg *config.TrafficFlow, prefix string, meshInboundRedirect string) *Chain {
+	meshInbound := NewChain(cfg.Chain.GetFullName(prefix))
 
 	// Excluded inbound ports
 	for _, port := range cfg.ExcludePorts {
@@ -28,9 +28,10 @@ func buildMeshInbound(cfg *config.TrafficFlow, meshInboundRedirect string) *Chai
 }
 
 func buildMeshOutbound(cfg *config.Config, loopback string) *Chain {
-	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName()
-	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName()
-	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName()
+	prefix := cfg.Redirect.NamePrefix
+	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
+	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
+	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName(prefix)
 	excludePorts := cfg.Redirect.Outbound.ExcludePorts
 	shouldRedirectDNS := func() bool { return cfg.Redirect.DNS.Enabled }
 	dnsRedirectPort := cfg.Redirect.DNS.Port
@@ -124,10 +125,11 @@ func buildMeshRedirect(chainName string, redirectPort uint16) *Chain {
 }
 
 func buildNatTable(cfg *config.Config, loopback string) *table.NatTable {
-	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName()
-	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName()
-	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName()
-	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName()
+	prefix := cfg.Redirect.NamePrefix
+	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
+	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
+	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
+	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName(prefix)
 	inboundRedirectPort := cfg.Redirect.Inbound.Port
 	outboundRedirectPort := cfg.Redirect.Outbound.Port
 	dnsRedirectPort := cfg.Redirect.DNS.Port
@@ -163,7 +165,7 @@ func buildNatTable(cfg *config.Config, loopback string) *table.NatTable {
 		)
 
 	// MESH_INBOUND
-	meshInbound := buildMeshInbound(cfg.Redirect.Inbound, inboundRedirectChainName)
+	meshInbound := buildMeshInbound(cfg.Redirect.Inbound, prefix, inboundRedirectChainName)
 
 	// MESH_INBOUND_REDIRECT
 	meshInboundRedirect := buildMeshRedirect(inboundRedirectChainName, inboundRedirectPort)

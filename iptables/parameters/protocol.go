@@ -92,6 +92,19 @@ func NotDestinationPortIf(predicate func() bool, port uint16) *TcpUdpParameter {
 	return nil
 }
 
+func sourcePort(port uint16, negative bool) *TcpUdpParameter {
+	return &TcpUdpParameter{
+		long:     "--source-port",
+		short:    "--sport",
+		value:    strconv.Itoa(int(port)),
+		negative: negative,
+	}
+}
+
+func SourcePort(port uint16) *TcpUdpParameter {
+	return sourcePort(port, false)
+}
+
 func tcpUdp(proto string, params []*TcpUdpParameter) *ProtocolParameter {
 	var parameters []ParameterBuilder
 

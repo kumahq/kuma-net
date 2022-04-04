@@ -5,19 +5,19 @@ import (
 	"strings"
 )
 
-type NewJumpParameter struct {
+type JumpParameter struct {
 	parameters []string
 }
 
-func (p *NewJumpParameter) Build(bool) string {
+func (p *JumpParameter) Build(bool) string {
 	return strings.Join(p.parameters, " ")
 }
 
-func (p *NewJumpParameter) Negate() ParameterBuilder {
+func (p *JumpParameter) Negate() ParameterBuilder {
 	return p
 }
 
-func Jump(parameter *NewJumpParameter) *Parameter {
+func Jump(parameter *JumpParameter) *Parameter {
 	return &Parameter{
 		long:       "--jump",
 		short:      "-j",
@@ -25,18 +25,18 @@ func Jump(parameter *NewJumpParameter) *Parameter {
 	}
 }
 
-func ToUserDefinedChain(chainName string) *NewJumpParameter {
-	return &NewJumpParameter{parameters: []string{chainName}}
+func ToUserDefinedChain(chainName string) *JumpParameter {
+	return &JumpParameter{parameters: []string{chainName}}
 }
 
-func ToPort(port uint16) *NewJumpParameter {
-	return &NewJumpParameter{parameters: []string{
+func ToPort(port uint16) *JumpParameter {
+	return &JumpParameter{parameters: []string{
 		"REDIRECT",
 		"--to-ports",
 		strconv.Itoa(int(port)),
 	}}
 }
 
-func Return() *NewJumpParameter {
-	return &NewJumpParameter{parameters: []string{"RETURN"}}
+func Return() *JumpParameter {
+	return &JumpParameter{parameters: []string{"RETURN"}}
 }

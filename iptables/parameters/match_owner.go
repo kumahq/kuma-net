@@ -17,7 +17,6 @@ package parameters
 
 import (
 	"fmt"
-	"strconv"
 )
 
 type OwnerParameter struct {
@@ -40,38 +39,38 @@ func (p *OwnerParameter) Build(bool) string {
 	return fmt.Sprintf("%s %s", p.flag, p.value)
 }
 
-func uid(id uint16, negative bool) *OwnerParameter {
+func uid(id string, negative bool) *OwnerParameter {
 	return &OwnerParameter{
 		flag:     "--uid-owner",
-		value:    strconv.Itoa(int(id)),
+		value:    id,
 		negative: negative,
 	}
 }
 
 // Uid matches if the packet socket's file structure (if it has one) is owned by the user
 // with given UID
-func Uid(id uint16) *OwnerParameter {
+func Uid(id string) *OwnerParameter {
 	return uid(id, false)
 }
 
-func NotUid(id uint16) *OwnerParameter {
+func NotUid(id string) *OwnerParameter {
 	return uid(id, true)
 }
 
-func gid(id uint16, negative bool) *OwnerParameter {
+func gid(id string, negative bool) *OwnerParameter {
 	return &OwnerParameter{
 		flag:     "--gid-owner",
-		value:    strconv.Itoa(int(id)),
+		value:    id,
 		negative: negative,
 	}
 }
 
 // Gid Matches if the packet socket's file structure is owned by the given group
-func Gid(id uint16) *OwnerParameter {
+func Gid(id string) *OwnerParameter {
 	return gid(id, false)
 }
 
-func NotGid(id uint16) *OwnerParameter {
+func NotGid(id string) *OwnerParameter {
 	return gid(id, true)
 }
 

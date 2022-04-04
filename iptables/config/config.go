@@ -1,8 +1,8 @@
 package config
 
 type Owner struct {
-	UID uint16
-	GID uint16
+	UID string
+	GID string
 }
 
 // TrafficFlow is a struct for Inbound/Outbound configuration
@@ -20,33 +20,19 @@ type DNS struct {
 }
 
 type Redirect struct {
-	Inbound  *TrafficFlow
-	Outbound *TrafficFlow
-	DNS      *DNS
-}
-
-type MeshInbound struct {
-	Prefix string
-	Name   string
-}
-
-func (c *MeshInbound) GetFullName() string {
-	return c.Prefix + c.Name
+	// NamePrefix is a prefix which will be used go generate chains name
+	NamePrefix string
+	Inbound    *TrafficFlow
+	Outbound   *TrafficFlow
+	DNS        *DNS
 }
 
 type Chain struct {
-	Prefix string
-	Name   string
+	Name string
 }
 
-func (c *Chain) WithPrefix(prefix string) *Chain {
-	c.Prefix = prefix
-
-	return c
-}
-
-func (c *Chain) GetFullName() string {
-	return c.Prefix + c.Name
+func (c *Chain) GetFullName(prefix string) string {
+	return prefix + c.Name
 }
 
 type Config struct {
@@ -59,8 +45,9 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Owner: &Owner{UID: 5678, GID: 5678},
+		Owner: &Owner{UID: "5678", GID: "5678"},
 		Redirect: &Redirect{
+			NamePrefix: "",
 			Inbound: &TrafficFlow{
 				Port:          15006,
 				Chain:         &Chain{Name: "MESH_INBOUND"},

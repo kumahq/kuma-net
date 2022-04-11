@@ -5,7 +5,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/kumahq/kuma-cni/test/framework/tcp/socket_options"
+	"github.com/kumahq/kuma-net/test/framework/tcp/socket_options"
 )
 
 // UnexpectedConnMessage ir a message which a TCP client would receive from

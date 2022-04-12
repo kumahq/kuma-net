@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-func ResolveAddress(host string, port uint16) (*net.TCPAddr, error) {
+func ResolveTCPAddress(host string, port uint16) (*net.TCPAddr, error) {
 	if host == "" {
 		return nil, fmt.Errorf("host cannot be empty")
 	}
@@ -18,7 +18,7 @@ func ResolveAddress(host string, port uint16) (*net.TCPAddr, error) {
 	portString := strconv.Itoa(int(port))
 	hostPort := net.JoinHostPort(host, portString)
 
-	addr, err := net.ResolveTCPAddr(Network, hostPort)
+	addr, err := net.ResolveTCPAddr("tcp", hostPort)
 	if err != nil {
 		// TODO (bartsmykla): think of better error message
 		return nil, fmt.Errorf(

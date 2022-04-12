@@ -2,11 +2,14 @@ package netns
 
 import (
 	"fmt"
+	"net"
 	"runtime"
 	"strings"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+
+	"github.com/kumahq/kuma-net/test/framework/tcp/socket_options"
 )
 
 const Loopback = "lo"
@@ -24,21 +27,122 @@ type Config struct {
 }
 
 type NetNS struct {
-	name string
-	ns   netns.NsHandle
-	veth *netlink.Veth
+	name     string
+	ns       netns.NsHandle
+	formerNS netns.NsHandle
+	veth     *netlink.Veth
 }
 
 func (ns *NetNS) Name() string {
 	return ns.name
 }
 
+func (ns *NetNS) Set() error {
+	formerNS, err := netns.Get()
+	if err != nil {
+		return fmt.Errorf("cannot get the original network namespace: %s", err)
+	}
+
+	if ns.formerNS.IsOpen() {
+		if err := ns.formerNS.Close(); err != nil {
+			return fmt.Errorf("cannot close the former network namespace: %s", err)
+		}
+	}
+
+	ns.formerNS = formerNS
+
+	if err := netns.Set(ns.ns); err != nil {
+		return fmt.Errorf("cannot set the network namespace: %s", err)
+	}
+
+	return nil
+}
+
+func (ns *NetNS) Unset() error {
+	if ns.formerNS.Equal(ns.ns) {
+		return nil
+	}
+
+	if !ns.formerNS.IsOpen() {
+		return fmt.Errorf("cannot unset the network namespace as the former " +
+			"namespace doesn't exist or is closed")
+	}
+
+	if err := netns.Set(ns.formerNS); err != nil {
+		return fmt.Errorf("cannot switch to the former network namespace: %s", err)
+	}
+
+	ns.formerNS = ns.ns
+
+	return nil
+}
+
+func (ns *NetNS) StartTCPServer(address string) error {
+	if err := ns.Set(); err != nil {
+		return fmt.Errorf("cannot start TCP server: %s", err)
+	}
+
+	l, err := net.Listen("tcp", address)
+	if err != nil {
+		return fmt.Errorf("cannot start TCP server: %s", err)
+	}
+	defer l.Close()
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return fmt.Errorf("cannot accept connection: %s", err)
+		}
+
+		go func() {
+			tcpConn := conn.(*net.TCPConn)
+
+			originalDst, err := socket_options.ExtractOriginalDst(tcpConn)
+			if err != nil {
+				tcpConn.Write([]byte(err.Error()))
+			} else {
+				tcpConn.Write(originalDst.Bytes())
+			}
+
+			tcpConn.CloseWrite()
+		}()
+	}
+}
+
+func (ns *NetNS) Exec(fn func() error) error {
+	errorC := make(chan error)
+
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		if err := ns.Set(); err != nil {
+			errorC <- err
+			return
+		}
+
+		defer ns.Unset()
+
+		errorC <- fn()
+	}()
+
+	return <-errorC
+}
+
 func (ns *NetNS) Cleanup() error {
 	var errs []string
 
-	if err := ns.ns.Close(); err != nil {
-		errs = append(errs, fmt.Sprintf("cannot close network namespace fd: %s", err))
-	}
+	// if ns.formerNS.IsOpen() {
+	// 	if err := ns.formerNS.Close(); err != nil {
+	// 		errs = append(errs, fmt.Sprintf("cannot close former namespace fd: %s", err))
+	// 	}
+	// }
+	//
+	// if ns.ns.IsOpen() {
+	// 	if err := ns.ns.Close(); err != nil {
+	// 		errs = append(errs, fmt.Sprintf("cannot close network namespace fd: %s", err))
+	// 	}
+	// }
 
 	if err := netns.DeleteNamed(ns.name); err != nil {
 		errs = append(errs, fmt.Sprintf("cannot delete network namespace: %s", err))
@@ -104,6 +208,9 @@ func NewNetNS(config *Config) (*NetNS, error) {
 
 	// Create a new network namespace (when creating new namespace,
 	// we are automatically switching into it)
+	//
+	// netns.NewNamed calls unix.Unshare(CLONE_NEWNET) which requires CAP_SYS_ADMIN
+	// capability (ref. https://man7.org/linux/man-pages/man2/unshare.2.html)
 	newNS, err := netns.NewNamed(config.Name)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create new network namespace: %s", err)

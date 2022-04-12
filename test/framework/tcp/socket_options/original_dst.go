@@ -11,17 +11,27 @@ import (
 //goland:noinspection GoSnakeCaseUsage
 const SO_ORIGINAL_DST = 80
 
-func ParseOriginalDst(multiaddr [16]byte) *net.TCPAddr {
+type OriginalDst struct {
+	*net.TCPAddr
+}
+
+func (o *OriginalDst) Bytes() []byte {
+	return []byte(o.String())
+}
+
+func ParseOriginalDst(multiaddr [16]byte) *OriginalDst {
 	address := net.IPv4(multiaddr[4], multiaddr[5], multiaddr[6], multiaddr[7])
 	port := uint16(multiaddr[2])<<8 + uint16(multiaddr[3])
 
-	return &net.TCPAddr{
-		IP:   address,
-		Port: int(port),
+	return &OriginalDst{
+		TCPAddr: &net.TCPAddr{
+			IP:   address,
+			Port: int(port),
+		},
 	}
 }
 
-func ExtractOriginalDst(conn *net.TCPConn) (*net.TCPAddr, error) {
+func ExtractOriginalDst(conn *net.TCPConn) (*OriginalDst, error) {
 	file, err := conn.File()
 	if err != nil {
 		// TODO (bartsmykla): wrap the error maybe?

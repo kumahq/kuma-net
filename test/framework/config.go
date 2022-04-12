@@ -17,7 +17,7 @@ type ConfigTCPServer struct {
 // TODO (bartsmykla): write description
 // TODO (bartsmykla): write tests maybe(?)
 func (c *ConfigTCPServer) Address() (*net.TCPAddr, error) {
-	return tcp.ResolveAddress(c.Host, c.Port)
+	return tcp.ResolveTCPAddress(c.Host, c.Port)
 }
 
 // Config

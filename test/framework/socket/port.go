@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+func GenerateRandomPort() uint16 {
+	var port uint16
+
+	for p := range GenerateRandomPorts(1) {
+		port = p
+	}
+
+	return port
+}
+
 func GenerateRandomPorts(num uint, restrictedPort ...uint16) map[uint16]struct{} {
 	rand.Seed(time.Now().UnixNano())
 	randomPorts := map[uint16]struct{}{}

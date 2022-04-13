@@ -20,12 +20,8 @@ func ResolveTCPAddress(host string, port uint16) (*net.TCPAddr, error) {
 
 	addr, err := net.ResolveTCPAddr("tcp", hostPort)
 	if err != nil {
-		// TODO (bartsmykla): think of better error message
 		return nil, fmt.Errorf(
-			"ResolveTCPAddr (%s:%d) failed: %s",
-			host,
-			port,
-			err,
+			"cannot resolve the tcp address (%s:%d): %s", host, port, err,
 		)
 	}
 

@@ -2,7 +2,6 @@ package blackbox_tests_test
 
 import (
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -43,10 +42,6 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 			},
 		})
 		Expect(err).To(BeNil())
-
-		go ns.StartTCPServer(fmt.Sprintf(":%d", tcpServerPort))
-
-		time.Sleep(2 * time.Second)
 	})
 
 	AfterEach(func() {
@@ -56,21 +51,23 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 	DescribeTable("should be redirected to outbound port",
 		func(port uint16) {
 			// when
-			Expect(ns.Exec(func() error {
+			address := fmt.Sprintf(":%d", tcpServerPort)
+			ready, err := ns.StartTCPServer(address, func() error {
 				cfg := config.DefaultConfig()
 				cfg.Redirect.Inbound.Port = tcpServerPort
 
 				_, err := builder.RestoreIPTables(cfg)
-				if err != nil {
-					return err
-				}
 
-				return nil
-			})).To(Succeed())
+				return err
+			})
+
+			Eventually(ready).Should(BeClosed())
 
 			// then
 			Expect(tcp.DialAndGetReply(peerAddress, port)).
 				To(Equal([]byte(fmt.Sprintf("%s:%d", peerAddress, port))))
+
+			Consistently(err).ShouldNot(Receive())
 		},
 		buildTableEntries(),
 	)

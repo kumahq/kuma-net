@@ -1,6 +1,7 @@
 package socket_options
 
 import (
+	"fmt"
 	"net"
 	"syscall"
 )
@@ -34,9 +35,9 @@ func ParseOriginalDst(multiaddr [16]byte) *OriginalDst {
 func ExtractOriginalDst(conn *net.TCPConn) (*OriginalDst, error) {
 	file, err := conn.File()
 	if err != nil {
-		// TODO (bartsmykla): wrap the error maybe?
-		return nil, err
+		return nil, fmt.Errorf("cannot get underlying tcp connection's file: %s", err)
 	}
+	defer file.Close()
 
 	fd := int(file.Fd())
 
@@ -46,8 +47,7 @@ func ExtractOriginalDst(conn *net.TCPConn) (*OriginalDst, error) {
 			return nil, nil
 		}
 
-		// TODO (bartsmykla): wrap the error maybe?
-		return nil, err
+		return nil, fmt.Errorf("cannot get socket options: %s", err)
 	}
 
 	return ParseOriginalDst(mreq.Multiaddr), nil

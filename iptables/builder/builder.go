@@ -3,6 +3,7 @@ package builder
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -57,11 +58,14 @@ func BuildIPTables(config *config.Config) (string, error) {
 	).Build(config.Verbose), nil
 }
 
-func saveIPTablesRestoreFile(f *os.File, content string) error {
+// infoOutput is the file (should be os.Stdout by default) where we can dump generated
+// rules for used to see and debug if something goes wrong, which can be overwritten
+// in tests to not obfuscate the other, more relevant logs
+func saveIPTablesRestoreFile(infoOutput io.Writer, f *os.File, content string) error {
 	defer f.Close()
 
-	fmt.Println("Writing following contents to rules file: ", f.Name())
-	fmt.Println(content)
+	fmt.Fprintln(infoOutput, "Writing following contents to rules file: ", f.Name())
+	fmt.Fprintln(infoOutput, content)
 
 	writer := bufio.NewWriter(f)
 	_, err := writer.WriteString(content)
@@ -85,7 +89,7 @@ func RestoreIPTables(config *config.Config) (string, error) {
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
 	}
 
-	if err := saveIPTablesRestoreFile(rulesFile, rules); err != nil {
+	if err := saveIPTablesRestoreFile(config.Output, rulesFile, rules); err != nil {
 		return "", err
 	}
 

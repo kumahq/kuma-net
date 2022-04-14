@@ -2,6 +2,7 @@ package blackbox_tests_test
 
 import (
 	"fmt"
+	"io/ioutil"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,31 +17,11 @@ import (
 var _ = Describe("Inbound TCP traffic from all ports", func() {
 	var err error
 	var ns *netns.NetNS
-	tcpServerPort := socket.GenerateRandomPort()
-	peerAddress := "192.168.111.2"
-
-	buildTableEntries := func() []TableEntry {
-		ports := socket.GenerateRandomPorts(50, tcpServerPort)
-		desc := fmt.Sprintf("to port %d, from port %%d", tcpServerPort)
-
-		var entries []TableEntry
-		for port := range ports {
-			entries = append(entries, Entry(EntryDescription(desc), port))
-		}
-
-		return entries
-	}
+	howManyPortsToTest := uint(50)
+	tcpServerPort := socket.GenFreeRandomPort()
 
 	BeforeEach(func() {
-		ns, err = netns.NewNetNS(&netns.Config{
-			Name: "foo",
-			Veth: &netns.Veth{
-				Name:        "main0",
-				PeerName:    "peer0",
-				Address:     "192.168.111.1/24",
-				PeerAddress: fmt.Sprintf("%s/24", peerAddress),
-			},
-		})
+		ns, err = netns.NewNetNS().Build()
 		Expect(err).To(BeNil())
 	})
 
@@ -55,6 +36,7 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 			ready, err := ns.StartTCPServer(address, func() error {
 				cfg := config.DefaultConfig()
 				cfg.Redirect.Inbound.Port = tcpServerPort
+				cfg.Output = ioutil.Discard
 
 				_, err := builder.RestoreIPTables(cfg)
 
@@ -64,11 +46,21 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 			Eventually(ready).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, port)).
-				To(Equal([]byte(fmt.Sprintf("%s:%d", peerAddress, port))))
+			Expect(tcp.DialAndGetReply(ns.Veth().PeerAddress(), port)).
+				To(Equal([]byte(fmt.Sprintf("%s:%d", ns.Veth().PeerAddress(), port))))
 
 			Consistently(err).ShouldNot(Receive())
 		},
-		buildTableEntries(),
+		func() []TableEntry {
+			ports := socket.GenerateRandomPorts(howManyPortsToTest, tcpServerPort)
+			desc := fmt.Sprintf("to port %d, from port %%d", tcpServerPort)
+
+			var entries []TableEntry
+			for port := range ports {
+				entries = append(entries, Entry(EntryDescription(desc), port))
+			}
+
+			return entries
+		}(),
 	)
 })

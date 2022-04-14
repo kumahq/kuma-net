@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func GenerateRandomPort() uint16 {
+func GenFreeRandomPort() uint16 {
 	var port uint16
 
 	for p := range GenerateRandomPorts(1) {

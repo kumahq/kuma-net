@@ -1,5 +1,10 @@
 package config
 
+import (
+	"io"
+	"os"
+)
+
 type Owner struct {
 	UID string
 	GID string
@@ -38,6 +43,10 @@ func (c *Chain) GetFullName(prefix string) string {
 type Config struct {
 	Owner    *Owner
 	Redirect *Redirect
+	// Output is the place where if any produced informational data (i.e. dump of the rules
+	// which will be applied for helping user to potentially debug if something would
+	// go wrong) will be placed (os.Stdout by default)
+	Output io.Writer
 	// Verbose when set will generate iptables configuration with longer argument/flag names,
 	// additional comments etc.
 	Verbose bool
@@ -62,6 +71,7 @@ func DefaultConfig() *Config {
 			},
 			DNS: &DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: true},
 		},
+		Output:  os.Stdout,
 		Verbose: true,
 	}
 }

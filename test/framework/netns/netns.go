@@ -2,6 +2,7 @@ package netns
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"runtime"
 	"strings"
@@ -12,29 +13,63 @@ import (
 	"github.com/kumahq/kuma-net/test/framework/tcp/socket_options"
 )
 
+// CLONE_NEWNET requires Linux Kernel 3.0+
+
+var suffixes = map[uint8]map[uint8]struct{}{}
+
 const Loopback = "lo"
 
 type Veth struct {
-	Name        string
-	PeerName    string
-	Address     string
-	PeerAddress string
+	veth        *netlink.Veth
+	name        string
+	peerName    string
+	address     string
+	cidr        string
+	peerAddress string
+	peerCIDR    string
 }
 
-type Config struct {
-	Name string
-	Veth *Veth
+func (v *Veth) Veth() *netlink.Veth {
+	return v.veth
+}
+
+func (v *Veth) PeerName() string {
+	return v.peerName
+}
+
+func (v *Veth) Address() string {
+	return v.address
+}
+
+func (v *Veth) Cidr() string {
+	return v.cidr
+}
+
+func (v *Veth) PeerAddress() string {
+	return v.peerAddress
+}
+
+func (v *Veth) PeerCIDR() string {
+	return v.peerCIDR
+}
+
+func (v *Veth) Name() string {
+	return v.name
 }
 
 type NetNS struct {
 	name       string
 	ns         netns.NsHandle
 	originalNS netns.NsHandle
-	veth       *netlink.Veth
+	veth       *Veth
 }
 
 func (ns *NetNS) Name() string {
 	return ns.name
+}
+
+func (ns *NetNS) Veth() *Veth {
+	return ns.veth
 }
 
 func (ns *NetNS) Set() error {
@@ -112,46 +147,174 @@ func (ns *NetNS) StartTCPServer(
 }
 
 func (ns *NetNS) Cleanup() error {
-	var errs []string
+	done := make(chan error)
 
-	if ns.originalNS.IsOpen() {
-		if err := ns.originalNS.Close(); err != nil {
-			errs = append(errs, fmt.Sprintf("cannot close the original namespace fd: %s", err))
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		var errs []string
+
+		if ns.originalNS.IsOpen() {
+			if err := ns.originalNS.Close(); err != nil {
+				errs = append(errs, fmt.Sprintf("cannot close the original namespace fd: %s", err))
+			}
 		}
-	}
 
-	if ns.ns.IsOpen() {
-		if err := ns.ns.Close(); err != nil {
-			errs = append(errs, fmt.Sprintf("cannot close the network namespace fd: %s", err))
+		if ns.ns.IsOpen() {
+			if err := ns.ns.Close(); err != nil {
+				errs = append(errs, fmt.Sprintf("cannot close the network namespace fd: %s", err))
+			}
 		}
-	}
 
-	if err := netns.DeleteNamed(ns.name); err != nil {
-		errs = append(errs, fmt.Sprintf("cannot delete network namespace: %s", err))
-	}
+		if err := netns.DeleteNamed(ns.Name()); err != nil {
+			errs = append(errs, fmt.Sprintf("cannot delete network namespace: %s", err))
+		}
 
-	if err := netlink.LinkDel(ns.veth); err != nil {
-		errs = append(errs, fmt.Sprintf("cannot delete veth interfaces: %s", err))
-	}
+		if err := netlink.LinkDel(ns.Veth().Veth()); err != nil {
+			errs = append(errs, fmt.Sprintf("cannot delete veth interfaces: %s", err))
+		}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("cleanup failed:\n  - %s", strings.Join(errs, "\n  - "))
-	}
+		if len(errs) > 0 {
+			done <- fmt.Errorf("cleanup failed:\n  - %s", strings.Join(errs, "\n  - "))
+		}
 
-	return nil
+		close(done)
+	}()
+
+	return <-done
 }
 
-func newVeth(config *Veth) *netlink.Veth {
+func newVeth(nameSeed string, suffixA, suffixB uint8) *netlink.Veth {
+	suffix := fmt.Sprintf("-%d%d", suffixA, suffixB)
 	la := netlink.NewLinkAttrs()
-	la.Name = config.Name
+	la.Name = fmt.Sprintf("%smain%s", nameSeed, suffix)
 
 	return &netlink.Veth{
 		LinkAttrs: la,
-		PeerName:  config.PeerName,
+		PeerName:  fmt.Sprintf("%speer%s", nameSeed, suffix),
 	}
 }
 
-func NewNetNS(config *Config) (*NetNS, error) {
+type Builder struct {
+	nameSeed string
+}
+
+func (b *Builder) WithNameSeed(seed string) *Builder {
+	b.nameSeed = seed
+
+	return b
+}
+
+// we need some values which will make all names we will use to create resources
+// (netns name, ip addresses, veth interface names) unique.
+// I decided that the easiest way go achieve this uniqueness is to generate
+// 2 uint8 values which will be representing second and third octets in the 10.0.0.0/8
+// subnet, which will allow us to generate ip (v4) addresses as well as the names.
+// genSuffixes will check if any network interface has already assigned subnet
+// within the range we are interested in and ignore suffixes in this range
+// Example of names regarding generated suffixes:
+// suffixes: 1, 254
+// 	netns name:			kmesh-1254
+// 	veth main name:		kmesh-main-1254
+// 	veth peer name: 	kmesh-peer-1254
+// 	veth main address:	10.1.254.1
+// 	veth main cidr:		10.1.254.1/8
+// 	veth peer address:	10.1.254.2
+// 	veth peer cidr:		10.1.254.2/8
+func genSuffixes() (uint8, uint8, error) {
+	ifaceAddresses, err := getIfaceAddresses()
+	if err != nil {
+		return 0, 0, fmt.Errorf("cannot get network interface addresses: %s", err)
+	}
+
+	for i := uint8(1); i < math.MaxUint8; i++ {
+		var s map[uint8]struct{}
+		var ok bool
+
+		if s, ok = suffixes[i]; ok {
+			if len(s) >= math.MaxUint8-1 {
+				continue
+			}
+		} else {
+			suffixes[i] = map[uint8]struct{}{
+				1: {},
+			}
+
+			if ifaceContainsAddress(ifaceAddresses, net.IP{10, i, 1, 0}) {
+				continue
+			}
+
+			return i, 1, nil
+		}
+
+		for j := uint8(1); j < math.MaxUint8; j++ {
+			if _, ok := s[j]; !ok {
+				s[j] = struct{}{}
+
+				if !ifaceContainsAddress(ifaceAddresses, net.IP{10, i, j, 0}) {
+					return i, j, nil
+				}
+			}
+		}
+	}
+
+	return 0, 0, fmt.Errorf("out of available suffixes")
+}
+
+func getIfaceAddresses() ([]*net.IPNet, error) {
+	var addresses []*net.IPNet
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("cannot list network interfaces: %s", err)
+	}
+
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return nil, fmt.Errorf("cannot list network interface's addresses: %s", err)
+		}
+
+		for _, addr := range addrs {
+			if err != nil {
+				return nil, fmt.Errorf("cannot resolve tcp address: %s", err)
+			}
+
+			addresses = append(addresses, addr.(*net.IPNet))
+		}
+	}
+
+	return addresses, nil
+}
+
+func ifaceContainsAddress(addresses []*net.IPNet, address net.IP) bool {
+	for _, ipNet := range addresses {
+		if ipNet.Contains(address) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func genAddress(octet2, octet3, octet4 uint8) string {
+	return fmt.Sprintf("10.%d.%d.%d", octet2, octet3, octet4)
+}
+
+func genCIDRAddress(octet2, octet3, octet4 uint8) string {
+	return fmt.Sprintf("%s/8", genAddress(octet2, octet3, octet4))
+}
+
+func genNetNSName(nameSeed string, suffixA, suffixB uint8) string {
+	return fmt.Sprintf("%s%d%d", nameSeed, suffixA, suffixB)
+}
+
+func (b *Builder) Build() (*NetNS, error) {
+	suffixA, suffixB, err := genSuffixes()
+	if err != nil {
+		return nil, fmt.Errorf("cannot generate suffixes: %s", err)
+	}
+
 	var ns *NetNS
 
 	done := make(chan error)
@@ -166,7 +329,7 @@ func NewNetNS(config *Config) (*NetNS, error) {
 		}
 
 		// Create a pair of veth interfaces
-		veth := newVeth(config.Veth)
+		veth := newVeth(b.nameSeed, suffixA, suffixB)
 		if addLinkErr := netlink.LinkAdd(veth); addLinkErr != nil {
 			done <- fmt.Errorf("cannot add veth interfaces: %s", addLinkErr)
 		}
@@ -176,7 +339,8 @@ func NewNetNS(config *Config) (*NetNS, error) {
 			done <- fmt.Errorf("cannot get main veth interface: %s", err)
 		}
 
-		mainAddr, err := netlink.ParseAddr(config.Veth.Address)
+		mainCIDR := genCIDRAddress(suffixA, suffixB, 1)
+		mainAddr, err := netlink.ParseAddr(mainCIDR)
 		if err != nil {
 			done <- fmt.Errorf("cannot parse main veth interface address: %s", err)
 		}
@@ -200,7 +364,8 @@ func NewNetNS(config *Config) (*NetNS, error) {
 		//
 		// netns.NewNamed calls unix.Unshare(CLONE_NEWNET) which requires CAP_SYS_ADMIN
 		// capability (ref. https://man7.org/linux/man-pages/man2/unshare.2.html)
-		newNS, err := netns.NewNamed(config.Name)
+		nsName := genNetNSName(b.nameSeed, suffixA, suffixB)
+		newNS, err := netns.NewNamed(nsName)
 		if err != nil {
 			done <- fmt.Errorf("cannot create new network namespace: %s", err)
 		}
@@ -231,7 +396,8 @@ func NewNetNS(config *Config) (*NetNS, error) {
 			done <- fmt.Errorf("cannot switch to new network interface: %s", err)
 		}
 
-		peerAddr, err := netlink.ParseAddr(config.Veth.PeerAddress)
+		peerCIDR := genCIDRAddress(suffixA, suffixB, 2)
+		peerAddr, err := netlink.ParseAddr(peerCIDR)
 		if err != nil {
 			done <- fmt.Errorf("cannot parse peer veth interface address: %s", err)
 		}
@@ -249,14 +415,28 @@ func NewNetNS(config *Config) (*NetNS, error) {
 		}
 
 		ns = &NetNS{
-			name:       config.Name,
+			name:       nsName,
 			ns:         newNS,
 			originalNS: originalNS,
-			veth:       veth,
+			veth: &Veth{
+				veth:        veth,
+				name:        veth.Name,
+				peerName:    veth.PeerName,
+				address:     genAddress(suffixA, suffixB, 1),
+				cidr:        mainCIDR,
+				peerAddress: genAddress(suffixA, suffixB, 2),
+				peerCIDR:    peerCIDR,
+			},
 		}
 
-		done <- nil
+		close(done)
 	}()
 
 	return ns, <-done
+}
+
+func NewNetNS() *Builder {
+	return &Builder{
+		nameSeed: "kmesh-",
+	}
 }

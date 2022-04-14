@@ -147,6 +147,10 @@ func (ns *NetNS) StartTCPServer(
 }
 
 func (ns *NetNS) Cleanup() error {
+	if ns == nil {
+		return nil
+	}
+
 	done := make(chan error)
 
 	go func() {
@@ -170,8 +174,9 @@ func (ns *NetNS) Cleanup() error {
 			errs = append(errs, fmt.Sprintf("cannot delete network namespace: %s", err))
 		}
 
-		if err := netlink.LinkDel(ns.Veth().Veth()); err != nil {
-			errs = append(errs, fmt.Sprintf("cannot delete veth interfaces: %s", err))
+		veth := ns.Veth().Veth()
+		if err := netlink.LinkDel(veth); err != nil {
+			errs = append(errs, fmt.Sprintf("cannot delete veth interface %q: %s", veth.Name, err))
 		}
 
 		if len(errs) > 0 {
@@ -208,19 +213,19 @@ func (b *Builder) WithNameSeed(seed string) *Builder {
 // we need some values which will make all names we will use to create resources
 // (netns name, ip addresses, veth interface names) unique.
 // I decided that the easiest way go achieve this uniqueness is to generate
-// 2 uint8 values which will be representing second and third octets in the 10.0.0.0/8
+// 2 uint8 values which will be representing second and third octets in the 10.0.0.0/24
 // subnet, which will allow us to generate ip (v4) addresses as well as the names.
 // genSuffixes will check if any network interface has already assigned subnet
 // within the range we are interested in and ignore suffixes in this range
 // Example of names regarding generated suffixes:
-// suffixes: 1, 254
-// 	netns name:			kmesh-1254
-// 	veth main name:		kmesh-main-1254
-// 	veth peer name: 	kmesh-peer-1254
-// 	veth main address:	10.1.254.1
-// 	veth main cidr:		10.1.254.1/8
-// 	veth peer address:	10.1.254.2
-// 	veth peer cidr:		10.1.254.2/8
+// suffixes: 123, 254
+// 	netns name:			kmesh-123254
+// 	veth main name:		kmesh-main-123254
+// 	veth peer name: 	kmesh-peer-123254
+// 	veth main address:	10.123.254.1
+// 	veth main cidr:		10.123.254.1/24
+// 	veth peer address:	10.123.254.2
+// 	veth peer cidr:		10.123.254.2/24
 func genSuffixes() (uint8, uint8, error) {
 	ifaceAddresses, err := getIfaceAddresses()
 	if err != nil {
@@ -302,7 +307,7 @@ func genAddress(octet2, octet3, octet4 uint8) string {
 }
 
 func genCIDRAddress(octet2, octet3, octet4 uint8) string {
-	return fmt.Sprintf("%s/8", genAddress(octet2, octet3, octet4))
+	return fmt.Sprintf("%s/24", genAddress(octet2, octet3, octet4))
 }
 
 func genNetNSName(nameSeed string, suffixA, suffixB uint8) string {
@@ -408,6 +413,10 @@ func (b *Builder) Build() (*NetNS, error) {
 
 		if err := netlink.LinkSetUp(peerLink); err != nil {
 			done <- fmt.Errorf("cannot set peer veth interface up: %s", err)
+		}
+
+		if err := netlink.RouteAdd(&netlink.Route{Gw: mainAddr.IP}); err != nil {
+			done <- fmt.Errorf("cannot set the default route: %s", err)
 		}
 
 		if err := netns.Set(originalNS); err != nil {

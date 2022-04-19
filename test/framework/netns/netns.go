@@ -6,6 +6,7 @@ import (
 	"net"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -141,6 +142,80 @@ func (ns *NetNS) StartTCPServer(
 				tcpConn.CloseWrite()
 			}()
 		}
+	}()
+
+	return readyC, errorC
+}
+
+func (ns *NetNS) StartUDPServer(
+	address string,
+	setuid uintptr,
+	callbacks ...func() error,
+) (<-chan struct{}, <-chan error) {
+	readyC := make(chan struct{})
+	errorC := make(chan error)
+
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		if err := ns.Set(); err != nil {
+			errorC <- fmt.Errorf("cannot switch to the namespace: %s", err)
+		}
+		defer ns.Unset()
+
+		for _, callback := range callbacks {
+			if err := callback(); err != nil {
+				errorC <- err
+			}
+		}
+
+		addr, err := net.ResolveUDPAddr("udp", address)
+		if err != nil {
+			errorC <- fmt.Errorf("cannot parse address and port %q: %s", address, err)
+		}
+
+		// This is very hacky way of making one process to operate under multiple UIDs,
+		// which breaks POSIX semantics (ref. https://man7.org/linux/man-pages/man7/nptl.7.html)
+		// The go's native syscall.Setuid is designed in a way, that all threads
+		// will switch to provided UID, so we have to use the Linux's setuid() syscall
+		// directly (it doesn't honor POSIX semantics).
+		//
+		// This logic exists to potentially run tests with DNS UDP conntrack zone splitting
+		// enabled.
+		//
+		// ref. https://stackoverflow.com/a/66523695
+		if setuid != 0 {
+			if _, _, e := syscall.RawSyscall(syscall.SYS_SETUID, setuid, 0, 0); e != 0 {
+				errorC <- fmt.Errorf("cannot exec syscall.SYS_SETUID (error number: %d)", e)
+			}
+		}
+
+		udpConn, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			errorC <- fmt.Errorf("cannot listen udp on address %q: %s", address, err)
+		}
+		defer udpConn.Close()
+
+		// At this point we are ready for accepting UDP datagrams
+		close(readyC)
+
+		buf := make([]byte, 1024)
+		n, clientAddr, err := udpConn.ReadFromUDP(buf)
+		if err != nil {
+			errorC <- fmt.Errorf("cannot read from udp: %s", err)
+		}
+
+		_, err = udpConn.WriteToUDP(buf[:n], clientAddr)
+		if err != nil {
+			errorC <- fmt.Errorf("cannot write to udp: %s", err)
+		}
+
+		if err := udpConn.Close(); err != nil {
+			errorC <- fmt.Errorf("cannot close udp connection: %s", err)
+		}
+
+		close(errorC)
 	}()
 
 	return readyC, errorC

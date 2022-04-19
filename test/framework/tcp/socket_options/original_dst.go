@@ -17,6 +17,10 @@ type OriginalDst struct {
 }
 
 func (o *OriginalDst) Bytes() []byte {
+	if o == nil {
+		return nil
+	}
+
 	return []byte(o.String())
 }
 

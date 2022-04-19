@@ -1,6 +1,5 @@
 package socket_test
 
-//goland:noinspection ALL
 import (
 	"math"
 	"math/rand"

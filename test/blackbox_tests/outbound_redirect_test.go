@@ -60,7 +60,7 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 				Expect(ns.Set()).To(Succeed())
 				defer ns.Unset()
 
-				address := ip.GenRandomIPv4()
+				address := ip.GenRandomIPv4().String()
 
 				Expect(tcp.DialAndGetReply(address, port)).
 					To(Equal([]byte(fmt.Sprintf("%s:%d", address, port))))

@@ -8,7 +8,7 @@ import (
 
 var r = rand.New(rand.NewSource(time.Now().UnixNano()))
 
-func GenRandomIPv4() string {
+func GenRandomIPv4() net.IP {
 	size := 4
 	ipBytes := make([]byte, size)
 	for i := 0; i < size; i++ {
@@ -65,5 +65,12 @@ func GenRandomIPv4() string {
 		}
 	}
 
-	return ip.To4().String()
+	return ip.To4()
+}
+
+func GenRandomUDPAddress(port uint16) *net.UDPAddr {
+	return &net.UDPAddr{
+		IP:   GenRandomIPv4(),
+		Port: int(port),
+	}
 }

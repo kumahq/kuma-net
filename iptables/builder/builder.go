@@ -90,11 +90,14 @@ func RestoreIPTables(config *config.Config) (string, error) {
 	}
 
 	if err := saveIPTablesRestoreFile(config.Output, rulesFile, rules); err != nil {
-		return "", err
+		return "", fmt.Errorf("unable to save iptables restore file: %s", err)
 	}
 
 	cmd := exec.Command("iptables-restore", "--noflush", rulesFile.Name())
 	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("executing command failed: %s (with output: %q)", err, output)
+	}
 
-	return string(output), err
+	return string(output), nil
 }

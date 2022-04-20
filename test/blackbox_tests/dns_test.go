@@ -49,11 +49,12 @@ var _ = Describe("Outbound DNS/UDP traffic to port 53", func() {
 				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
 			})).Should(BeClosed())
 
-			// then
+			// and
 			Eventually(ns.Exec(func() {
 				Expect(udp.DialAndGetReply(address, address)).To(Equal(address.String()))
 			})).Should(BeClosed())
 
+			// then
 			Eventually(errC).Should(BeClosed())
 		},
 		func() []TableEntry {

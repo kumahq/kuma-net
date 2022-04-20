@@ -15,7 +15,7 @@ import (
 	"github.com/kumahq/kuma-net/test/framework/tcp"
 )
 
-var _ = Describe("Inbound TCP traffic from all ports", func() {
+var _ = Describe("Outbound TCP traffic to any address:port", func() {
 	var err error
 	var ns *netns.NetNS
 	var tcpServerPort uint16

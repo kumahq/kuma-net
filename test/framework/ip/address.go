@@ -67,10 +67,3 @@ func GenRandomIPv4() net.IP {
 
 	return ip.To4()
 }
-
-func GenRandomUDPAddress(port uint16) *net.UDPAddr {
-	return &net.UDPAddr{
-		IP:   GenRandomIPv4(),
-		Port: int(port),
-	}
-}

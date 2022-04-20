@@ -19,14 +19,13 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 	var err error
 	var ns *netns.NetNS
 	var tcpServerPort uint16
-	howManyPortsToTest := uint(50)
 
 	BeforeEach(func() {
 		DeferCleanup(ns.Cleanup)
 
 		tcpServerPort = socket.GenFreeRandomPort()
 
-		ns, err = netns.NewNetNS().Build()
+		ns, err = netns.NewNetNSBuilder().Build()
 		Expect(err).To(BeNil())
 	})
 
@@ -34,16 +33,21 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 		func(port uint16) {
 			// given
 			address := fmt.Sprintf(":%d", tcpServerPort)
-			tcpReadyC, tcpErrC := ns.StartTCPServer(address)
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Port: tcpServerPort,
+					},
+				},
+				Output: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := ns.StartTCPServer(address, tcp.ReplyWithOriginalDst)
 			Eventually(tcpReadyC).Should(BeClosed())
 
 			// when
 			Eventually(ns.Exec(func() {
-				cfg := config.DefaultConfig()
-				cfg.Redirect.Outbound.Port = tcpServerPort
-				cfg.Output = ioutil.Discard
-
-				Expect(builder.RestoreIPTables(cfg)).Error().To(Succeed())
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
 			})).Should(BeClosed())
 
 			// then
@@ -57,7 +61,7 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 			Consistently(tcpErrC).ShouldNot(Receive())
 		},
 		func() []TableEntry {
-			ports := socket.GenerateRandomPorts(howManyPortsToTest, tcpServerPort)
+			ports := socket.GenerateRandomPorts(50, tcpServerPort)
 			desc := fmt.Sprintf("to port %%d, from port %d", tcpServerPort)
 
 			var entries []TableEntry

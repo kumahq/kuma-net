@@ -7,7 +7,7 @@ import (
 	"github.com/kumahq/kuma-net/iptables/table"
 )
 
-func buildRawTable(cfg *config.Config) *table.RawTable {
+func buildRawTable(cfg config.Config) *table.RawTable {
 	raw := table.Raw()
 
 	if cfg.Redirect.DNS.Enabled && cfg.Redirect.DNS.ConntrackZoneSplit {

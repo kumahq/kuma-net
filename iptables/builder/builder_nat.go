@@ -8,7 +8,7 @@ import (
 	"github.com/kumahq/kuma-net/iptables/table"
 )
 
-func buildMeshInbound(cfg *config.TrafficFlow, prefix string, meshInboundRedirect string) *Chain {
+func buildMeshInbound(cfg config.TrafficFlow, prefix string, meshInboundRedirect string) *Chain {
 	meshInbound := NewChain(cfg.Chain.GetFullName(prefix))
 
 	// Excluded inbound ports
@@ -27,7 +27,7 @@ func buildMeshInbound(cfg *config.TrafficFlow, prefix string, meshInboundRedirec
 	return meshInbound
 }
 
-func buildMeshOutbound(cfg *config.Config, loopback string) *Chain {
+func buildMeshOutbound(cfg config.Config, loopback string) *Chain {
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
@@ -124,7 +124,7 @@ func buildMeshRedirect(chainName string, redirectPort uint16) *Chain {
 		)
 }
 
-func buildNatTable(cfg *config.Config, loopback string) *table.NatTable {
+func buildNatTable(cfg config.Config, loopback string) *table.NatTable {
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)

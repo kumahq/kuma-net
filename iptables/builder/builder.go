@@ -46,16 +46,18 @@ func (t *IPTables) Build(verbose bool) string {
 	return strings.Join(tables, separator) + "\n"
 }
 
-func BuildIPTables(config *config.Config) (string, error) {
+func BuildIPTables(cfg config.Config) (string, error) {
+	cfg = config.MergeConfig(cfg)
+
 	loopbackIface, err := getLoopback()
 	if err != nil {
 		return "", fmt.Errorf("cannot obtain loopback interface: %s", err)
 	}
 
 	return newIPTables(
-		buildRawTable(config),
-		buildNatTable(config, loopbackIface.Name),
-	).Build(config.Verbose), nil
+		buildRawTable(cfg),
+		buildNatTable(cfg, loopbackIface.Name),
+	).Build(cfg.Verbose), nil
 }
 
 // infoOutput is the file (should be os.Stdout by default) where we can dump generated
@@ -76,7 +78,9 @@ func saveIPTablesRestoreFile(infoOutput io.Writer, f *os.File, content string) e
 	return writer.Flush()
 }
 
-func RestoreIPTables(config *config.Config) (string, error) {
+func RestoreIPTables(cfg config.Config) (string, error) {
+	cfg = config.MergeConfig(cfg)
+
 	filename := fmt.Sprintf("iptables-rules-%d.txt", time.Now().UnixNano())
 	rulesFile, err := os.CreateTemp("", filename)
 	if err != nil {
@@ -84,12 +88,12 @@ func RestoreIPTables(config *config.Config) (string, error) {
 	}
 	defer os.Remove(rulesFile.Name())
 
-	rules, err := BuildIPTables(config)
+	rules, err := BuildIPTables(cfg)
 	if err != nil {
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
 	}
 
-	if err := saveIPTablesRestoreFile(config.Output, rulesFile, rules); err != nil {
+	if err := saveIPTablesRestoreFile(cfg.Output, rulesFile, rules); err != nil {
 		return "", fmt.Errorf("unable to save iptables restore file: %s", err)
 	}
 

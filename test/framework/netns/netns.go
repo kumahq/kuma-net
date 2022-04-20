@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/onsi/ginkgo/v2"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 
@@ -79,6 +80,27 @@ func (ns *NetNS) Set() error {
 	}
 
 	return nil
+}
+
+func (ns *NetNS) Exec(callback func()) <-chan error {
+	done := make(chan error)
+
+	go func() {
+		defer ginkgo.GinkgoRecover()
+		defer close(done)
+
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		if err := ns.Set(); err != nil {
+			done <- fmt.Errorf("cannot set the namespace %q: %s", ns.name, err)
+		}
+		defer ns.Unset()
+
+		callback()
+	}()
+
+	return done
 }
 
 func (ns *NetNS) Unset() error {
@@ -228,6 +250,8 @@ func (ns *NetNS) Cleanup() error {
 
 	done := make(chan error)
 
+	// It's necessary to run the code in separate goroutine to lock the os thread
+	// to pin the network namespaces for our purposes
 	go func() {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()

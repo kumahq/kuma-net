@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -23,64 +22,48 @@ var _ = Describe("Outbound DNS traffic to port 53", func() {
 	howManyPortsToTest := uint(50)
 
 	BeforeEach(func() {
+		DeferCleanup(ns.Cleanup)
+
 		ns, err = netns.NewNetNS().Build()
 		Expect(err).To(BeNil())
-	})
-
-	AfterEach(func() {
-		Expect(ns.Cleanup()).To(Succeed())
 	})
 
 	DescribeTable("should be redirected to provided port",
 		func(port uint16) {
 			// given
-			done := make(chan struct{})
+			udpReadyC, udpErrC := ns.StartUDPServer(fmt.Sprintf("127.0.0.1:%d", port), 0)
+			Consistently(udpErrC).ShouldNot(Receive())
+			Eventually(udpReadyC).Should(BeClosed())
 
 			// when
-			ready, err := ns.StartUDPServer(fmt.Sprintf("127.0.0.1:%d", port), 0,
-				func() error {
-					cfg := config.DefaultConfig()
-					cfg.Redirect.DNS.Enabled = true
-					cfg.Redirect.DNS.Port = port
-					cfg.Output = ioutil.Discard
+			Eventually(ns.Exec(func() {
+				cfg := config.DefaultConfig()
+				cfg.Redirect.DNS.Enabled = true
+				cfg.Redirect.DNS.Port = port
+				cfg.Output = ioutil.Discard
 
-					_, err := builder.RestoreIPTables(cfg)
-
-					return err
-				})
-
-			Consistently(err).ShouldNot(Receive())
-			Eventually(ready).Should(BeClosed())
+				Expect(builder.RestoreIPTables(cfg)).Error().To(Succeed())
+			})).Should(BeClosed())
 
 			// then
-			go func() {
-				defer GinkgoRecover()
-				defer close(done)
-
-				runtime.LockOSThread()
-				defer runtime.UnlockOSThread()
-
-				Expect(ns.Set()).To(Succeed())
-				defer ns.Unset()
-
+			Eventually(ns.Exec(func() {
 				udpAddress := ip.GenRandomUDPAddress(consts.DNSPort)
 
 				socket, err := net.DialUDP("udp", nil, udpAddress)
-				Expect(err).To(BeNil())
+				Expect(err).To(Succeed())
 				defer socket.Close()
 
 				sendData := []byte(udpAddress.String())
-				Expect(socket.Write(sendData)).Error().To(BeNil())
+				Expect(socket.Write(sendData)).Error().To(Succeed())
 
 				buf := make([]byte, 1024)
 				n, err := socket.Read(buf)
 				Expect(err).To(Succeed())
 
 				Expect(buf[:n]).To(Equal(sendData))
-			}()
+			})).Should(BeClosed())
 
-			Eventually(err).Should(BeClosed())
-			Eventually(done).Should(BeClosed())
+			Eventually(udpErrC).Should(BeClosed())
 		},
 		func() []TableEntry {
 			ports := socket.GenerateRandomPorts(howManyPortsToTest, consts.DNSPort)

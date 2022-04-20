@@ -17,38 +17,37 @@ import (
 var _ = Describe("Inbound TCP traffic from all ports", func() {
 	var err error
 	var ns *netns.NetNS
-	tcpServerPort := socket.GenFreeRandomPort()
+	var tcpServerPort uint16
 
 	BeforeEach(func() {
+		DeferCleanup(ns.Cleanup)
+
+		tcpServerPort = socket.GenFreeRandomPort()
+
 		ns, err = netns.NewNetNS().Build()
 		Expect(err).To(BeNil())
 	})
 
-	AfterEach(func() {
-		Expect(ns.Cleanup()).To(Succeed())
-	})
-
 	DescribeTable("should be redirected to outbound port",
 		func(port uint16) {
+			// given
+			tcpReadyC, tcpErrC := ns.StartTCPServer(fmt.Sprintf(":%d", tcpServerPort))
+			Eventually(tcpReadyC).Should(BeClosed())
+
 			// when
-			address := fmt.Sprintf(":%d", tcpServerPort)
-			ready, err := ns.StartTCPServer(address, func() error {
+			Eventually(ns.Exec(func() {
 				cfg := config.DefaultConfig()
 				cfg.Redirect.Inbound.Port = tcpServerPort
 				cfg.Output = ioutil.Discard
 
-				_, err := builder.RestoreIPTables(cfg)
-
-				return err
-			})
-
-			Eventually(ready).Should(BeClosed())
+				Expect(builder.RestoreIPTables(cfg)).Error().To(Succeed())
+			})).Should(BeClosed())
 
 			// then
 			Expect(tcp.DialAndGetReply(ns.Veth().PeerAddress(), port)).
 				To(Equal([]byte(fmt.Sprintf("%s:%d", ns.Veth().PeerAddress(), port))))
 
-			Consistently(err).ShouldNot(Receive())
+			Consistently(tcpErrC).ShouldNot(Receive())
 		},
 		func() []TableEntry {
 			ports := socket.GenerateRandomPorts(50, tcpServerPort)

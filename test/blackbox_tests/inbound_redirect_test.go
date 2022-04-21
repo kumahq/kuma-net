@@ -31,17 +31,18 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 	DescribeTable("should be redirected to outbound port",
 		func(port uint16) {
 			// given
-			address := fmt.Sprintf(":%d", tcpServerPort)
+			tcpServerAddress := fmt.Sprintf(":%d", tcpServerPort)
+			peerAddress := ns.Veth().PeerAddress()
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Inbound: config.TrafficFlow{
 						Port: tcpServerPort,
 					},
 				},
-				Output: ioutil.Discard,
+				RuntimeOutput: ioutil.Discard,
 			}
 
-			tcpReadyC, tcpErrC := ns.StartTCPServer(address, tcp.ReplyWithOriginalDst)
+			tcpReadyC, tcpErrC := ns.StartTCPServer(tcpServerAddress, tcp.ReplyWithOriginalDst)
 			Eventually(tcpReadyC).Should(BeClosed())
 
 			// when
@@ -50,9 +51,10 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 			})).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(ns.Veth().PeerAddress(), port)).
-				To(Equal([]byte(fmt.Sprintf("%s:%d", ns.Veth().PeerAddress(), port))))
+			Expect(tcp.DialAndGetReply(peerAddress, port)).
+				To(Equal(fmt.Sprintf("%s:%d", peerAddress, port)))
 
+			// and, then
 			Consistently(tcpErrC).ShouldNot(Receive())
 		},
 		func() []TableEntry {
@@ -94,9 +96,9 @@ var _ = Describe("Inbound TCP traffic from all ports except excluded ones", func
 						ExcludePorts: []uint16{excludedPort},
 					},
 				},
-				Output: ioutil.Discard,
+				RuntimeOutput: ioutil.Discard,
 			}
-			want := []byte("foobar")
+			peerAddress := ns.Veth().PeerAddress()
 
 			redirectReadyC, redirectErrC := ns.StartTCPServer(
 				fmt.Sprintf(":%d", redirectTCPServerPort),
@@ -106,7 +108,7 @@ var _ = Describe("Inbound TCP traffic from all ports except excluded ones", func
 
 			excludedReadyC, excludedErrC := ns.StartTCPServer(
 				fmt.Sprintf(":%d", excludedPort),
-				tcp.ReplyWith(want),
+				tcp.ReplyWith("foobar"),
 			)
 			Eventually(excludedReadyC).Should(BeClosed())
 
@@ -116,11 +118,10 @@ var _ = Describe("Inbound TCP traffic from all ports except excluded ones", func
 			})).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(ns.Veth().PeerAddress(), excludedPort)).
-				To(Equal(want))
+			Expect(tcp.DialAndGetReply(peerAddress, excludedPort)).To(Equal("foobar"))
 
-			Expect(tcp.DialAndGetReply(ns.Veth().PeerAddress(), port)).
-				To(Equal([]byte(fmt.Sprintf("%s:%d", ns.Veth().PeerAddress(), port))))
+			Expect(tcp.DialAndGetReply(peerAddress, port)).
+				To(Equal(fmt.Sprintf("%s:%d", peerAddress, port)))
 
 			Consistently(redirectErrC).ShouldNot(Receive())
 			Consistently(excludedErrC).ShouldNot(Receive())

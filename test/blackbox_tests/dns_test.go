@@ -37,7 +37,7 @@ var _ = Describe("Outbound DNS/UDP traffic to port 53", func() {
 						Port:    port,
 					},
 				},
-				Output: ioutil.Discard,
+				RuntimeOutput: ioutil.Discard,
 			}
 
 			readyC, errC := ns.StartUDPServer(fmt.Sprintf("127.0.0.1:%d", port), 0)
@@ -51,7 +51,8 @@ var _ = Describe("Outbound DNS/UDP traffic to port 53", func() {
 
 			// and
 			Eventually(ns.Exec(func() {
-				Expect(udp.DialAndGetReply(address, address)).To(Equal(address.String()))
+				Expect(udp.DialWithHelloMsgAndGetReply(address, address)).
+					To(Equal(address.String()))
 			})).Should(BeClosed())
 
 			// then

@@ -47,7 +47,7 @@ func (t *IPTables) Build(verbose bool) string {
 }
 
 func BuildIPTables(cfg config.Config) (string, error) {
-	cfg = config.MergeConfig(cfg)
+	cfg = config.MergeConfigWithDefaults(cfg)
 
 	loopbackIface, err := getLoopback()
 	if err != nil {
@@ -79,7 +79,7 @@ func saveIPTablesRestoreFile(infoOutput io.Writer, f *os.File, content string) e
 }
 
 func RestoreIPTables(cfg config.Config) (string, error) {
-	cfg = config.MergeConfig(cfg)
+	cfg = config.MergeConfigWithDefaults(cfg)
 
 	filename := fmt.Sprintf("iptables-rules-%d.txt", time.Now().UnixNano())
 	rulesFile, err := os.CreateTemp("", filename)
@@ -93,7 +93,7 @@ func RestoreIPTables(cfg config.Config) (string, error) {
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
 	}
 
-	if err := saveIPTablesRestoreFile(cfg.Output, rulesFile, rules); err != nil {
+	if err := saveIPTablesRestoreFile(cfg.RuntimeOutput, rulesFile, rules); err != nil {
 		return "", fmt.Errorf("unable to save iptables restore file: %s", err)
 	}
 

@@ -39,7 +39,7 @@ var _ = Describe("Outbound TCP traffic to any address:port", func() {
 						Port: tcpServerPort,
 					},
 				},
-				Output: ioutil.Discard,
+				RuntimeOutput: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := ns.StartTCPServer(address, tcp.ReplyWithOriginalDst)
@@ -55,7 +55,7 @@ var _ = Describe("Outbound TCP traffic to any address:port", func() {
 				address := ip.GenRandomIPv4().String()
 
 				Expect(tcp.DialAndGetReply(address, port)).
-					To(Equal([]byte(fmt.Sprintf("%s:%d", address, port))))
+					To(Equal(fmt.Sprintf("%s:%d", address, port)))
 			})).Should(BeClosed())
 
 			Consistently(tcpErrC).ShouldNot(Receive())

@@ -43,10 +43,11 @@ func (c Chain) GetFullName(prefix string) string {
 type Config struct {
 	Owner    Owner
 	Redirect Redirect
-	// Output is the place where Any debugging information will be placed (os.Stdout by default)
-	Output io.Writer
-	// Verbose when set will generate iptables configuration with longer argument/flag names,
-	// additional comments etc.
+	// RuntimeOutput is the place where Any debugging, runtime information
+	// will be placed (os.Stdout by default)
+	RuntimeOutput io.Writer
+	// Verbose when set will generate iptables configuration with longer
+	// argument/flag names, additional comments etc.
 	Verbose bool
 }
 
@@ -69,12 +70,12 @@ func defaultConfig() Config {
 			},
 			DNS: DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: false},
 		},
-		Output:  os.Stdout,
-		Verbose: true,
+		RuntimeOutput: os.Stdout,
+		Verbose:       true,
 	}
 }
 
-func MergeConfig(cfg Config) Config {
+func MergeConfigWithDefaults(cfg Config) Config {
 	result := defaultConfig()
 
 	// .Owner
@@ -133,9 +134,9 @@ func MergeConfig(cfg Config) Config {
 		result.Redirect.DNS.Port = cfg.Redirect.DNS.Port
 	}
 
-	// .Output
-	if cfg.Output != nil {
-		result.Output = cfg.Output
+	// .RuntimeOutput
+	if cfg.RuntimeOutput != nil {
+		result.RuntimeOutput = cfg.RuntimeOutput
 	}
 
 	// .Verbose

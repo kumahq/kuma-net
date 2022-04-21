@@ -12,6 +12,11 @@ import (
 	"github.com/vishvananda/netns"
 )
 
+// This article is very helpful to understand the logic of why we have to use
+// runtime.LockOSThread() in places where we are working with the Linux network
+// namespaces:
+// https://www.ardanlabs.com/blog/2018/08/scheduling-in-go-part2.html
+
 // CLONE_NEWNET requires Linux Kernel 3.0+
 
 type Veth struct {

@@ -60,14 +60,14 @@ func BuildIPTables(cfg config.Config) (string, error) {
 	).Build(cfg.Verbose), nil
 }
 
-// infoOutput is the file (should be os.Stdout by default) where we can dump generated
+// runtimeOutput is the file (should be os.Stdout by default) where we can dump generated
 // rules for used to see and debug if something goes wrong, which can be overwritten
 // in tests to not obfuscate the other, more relevant logs
-func saveIPTablesRestoreFile(infoOutput io.Writer, f *os.File, content string) error {
+func saveIPTablesRestoreFile(runtimeOutput io.Writer, f *os.File, content string) error {
 	defer f.Close()
 
-	fmt.Fprintln(infoOutput, "Writing following contents to rules file: ", f.Name())
-	fmt.Fprintln(infoOutput, content)
+	_, _ = fmt.Fprintln(runtimeOutput, "Writing following contents to rules file: ", f.Name())
+	_, _ = fmt.Fprintln(runtimeOutput, content)
 
 	writer := bufio.NewWriter(f)
 	_, err := writer.WriteString(content)

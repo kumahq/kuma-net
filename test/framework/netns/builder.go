@@ -46,7 +46,7 @@ func (b *Builder) WithNameSeed(seed string) *Builder {
 // suffixes: 123, 254
 // 	netns name:			kmesh-123254
 // 	veth main name:		kmesh-main-123254
-// 	veth peer name: 	kmesh-peer-123254
+// 	veth peer name:		kmesh-peer-123254
 // 	veth main address:	10.123.254.1
 // 	veth main cidr:		10.123.254.1/24
 // 	veth peer address:	10.123.254.2

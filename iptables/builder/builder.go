@@ -3,6 +3,7 @@ package builder
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -45,23 +46,28 @@ func (t *IPTables) Build(verbose bool) string {
 	return strings.Join(tables, separator) + "\n"
 }
 
-func BuildIPTables(config *config.Config) (string, error) {
+func BuildIPTables(cfg config.Config) (string, error) {
+	cfg = config.MergeConfigWithDefaults(cfg)
+
 	loopbackIface, err := getLoopback()
 	if err != nil {
 		return "", fmt.Errorf("cannot obtain loopback interface: %s", err)
 	}
 
 	return newIPTables(
-		buildRawTable(config),
-		buildNatTable(config, loopbackIface.Name),
-	).Build(config.Verbose), nil
+		buildRawTable(cfg),
+		buildNatTable(cfg, loopbackIface.Name),
+	).Build(cfg.Verbose), nil
 }
 
-func saveIPTablesRestoreFile(f *os.File, content string) error {
+// runtimeOutput is the file (should be os.Stdout by default) where we can dump generated
+// rules for used to see and debug if something goes wrong, which can be overwritten
+// in tests to not obfuscate the other, more relevant logs
+func saveIPTablesRestoreFile(runtimeOutput io.Writer, f *os.File, content string) error {
 	defer f.Close()
 
-	fmt.Println("Writing following contents to rules file: ", f.Name())
-	fmt.Println(content)
+	_, _ = fmt.Fprintln(runtimeOutput, "Writing following contents to rules file: ", f.Name())
+	_, _ = fmt.Fprintln(runtimeOutput, content)
 
 	writer := bufio.NewWriter(f)
 	_, err := writer.WriteString(content)
@@ -72,7 +78,9 @@ func saveIPTablesRestoreFile(f *os.File, content string) error {
 	return writer.Flush()
 }
 
-func RestoreIPTables(config *config.Config) (string, error) {
+func RestoreIPTables(cfg config.Config) (string, error) {
+	cfg = config.MergeConfigWithDefaults(cfg)
+
 	filename := fmt.Sprintf("iptables-rules-%d.txt", time.Now().UnixNano())
 	rulesFile, err := os.CreateTemp("", filename)
 	if err != nil {
@@ -80,17 +88,20 @@ func RestoreIPTables(config *config.Config) (string, error) {
 	}
 	defer os.Remove(rulesFile.Name())
 
-	rules, err := BuildIPTables(config)
+	rules, err := BuildIPTables(cfg)
 	if err != nil {
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
 	}
 
-	if err := saveIPTablesRestoreFile(rulesFile, rules); err != nil {
-		return "", err
+	if err := saveIPTablesRestoreFile(cfg.RuntimeOutput, rulesFile, rules); err != nil {
+		return "", fmt.Errorf("unable to save iptables restore file: %s", err)
 	}
 
 	cmd := exec.Command("iptables-restore", "--noflush", rulesFile.Name())
 	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("executing command failed: %s (with output: %q)", err, output)
+	}
 
-	return string(output), err
+	return string(output), nil
 }

@@ -10,7 +10,7 @@ func (p *CtParameter) Build() []string {
 }
 
 func Ct(ctParameters ...*CtParameter) *JumpParameter {
-	var parameters []string
+	parameters := []string{"CT"}
 
 	for _, parameter := range ctParameters {
 		parameters = append(parameters, parameter.Build()...)

@@ -7,11 +7,11 @@ import (
 	"github.com/kumahq/kuma-net/iptables/table"
 )
 
-func buildRawTable(cfg *config.Config) *table.RawTable {
+func buildRawTable(cfg config.Config) *table.RawTable {
 	raw := table.Raw()
 
 	if cfg.Redirect.DNS.Enabled && cfg.Redirect.DNS.ConntrackZoneSplit {
-		raw.Prerouting().
+		raw.Output().
 			Append(
 				Protocol(Udp(DestinationPort(DNSPort))),
 				Match(Owner(Uid(cfg.Owner.UID))),
@@ -37,7 +37,7 @@ func buildRawTable(cfg *config.Config) *table.RawTable {
 				Jump(Ct(Zone("2"))),
 			)
 
-		raw.Output().
+		raw.Prerouting().
 			Append(
 				Protocol(Udp(SourcePort(DNSPort))),
 				Jump(Ct(Zone("1"))),

@@ -1,1 +1,1 @@
-# kuma-cni
+# kuma-net

@@ -46,7 +46,7 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 			Eventually(tcpReadyC).Should(BeClosed())
 
 			// when
-			Eventually(ns.Exec(func() {
+			Eventually(ns.UnsafeExec(func() {
 				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
 			})).Should(BeClosed())
 
@@ -113,7 +113,7 @@ var _ = Describe("Inbound TCP traffic from all ports except excluded ones", func
 			Eventually(excludedReadyC).Should(BeClosed())
 
 			// when
-			Eventually(ns.Exec(func() {
+			Eventually(ns.UnsafeExec(func() {
 				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
 			})).Should(BeClosed())
 

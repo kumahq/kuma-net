@@ -45,12 +45,12 @@ var _ = Describe("Outbound DNS/UDP traffic to port 53", func() {
 			Eventually(readyC).Should(BeClosed())
 
 			// when
-			Eventually(ns.Exec(func() {
+			Eventually(ns.UnsafeExec(func() {
 				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
 			})).Should(BeClosed())
 
 			// and
-			Eventually(ns.Exec(func() {
+			Eventually(ns.UnsafeExec(func() {
 				Expect(udp.DialWithHelloMsgAndGetReply(address, address)).
 					To(Equal(address.String()))
 			})).Should(BeClosed())

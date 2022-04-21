@@ -46,12 +46,12 @@ var _ = Describe("Outbound TCP traffic to any address:port", func() {
 			Eventually(tcpReadyC).Should(BeClosed())
 
 			// when
-			Eventually(ns.Exec(func() {
+			Eventually(ns.UnsafeExec(func() {
 				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
 			})).Should(BeClosed())
 
 			// then
-			Eventually(ns.Exec(func() {
+			Eventually(ns.UnsafeExec(func() {
 				address := ip.GenRandomIPv4().String()
 
 				Expect(tcp.DialAndGetReply(address, port)).

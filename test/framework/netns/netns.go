@@ -75,7 +75,16 @@ func (ns *NetNS) Set() error {
 	return nil
 }
 
-func (ns *NetNS) Exec(callback func()) <-chan error {
+// UnsafeExec will execute provided callback function in the created network namespace
+// from the *NetNS. It was named UnsafeExec instead of Exec as you have to be very
+// cautious and remember to not spawn new goroutines inside provided callback (more
+// info in warning below)
+//
+// WARNING!:
+//  Don't spawn new goroutines inside callback functions as the one inside UnsafeExec
+//  function have exclusive access to the current network namespace, and you should
+//  assume, that any new goroutine will be placed in the different namespace
+func (ns *NetNS) UnsafeExec(callback func()) <-chan error {
 	done := make(chan error)
 
 	go func() {

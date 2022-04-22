@@ -5,10 +5,10 @@ import (
 	"net"
 )
 
-func DialAndGetReply(host string, port uint16) (string, error) {
-	address, err := ResolveTCPAddress(host, port)
-	if err != nil {
-		return "", fmt.Errorf("cannot resolve tcp address: %s", err)
+func DialAndGetReply(ip net.IP, port uint16) (string, error) {
+	address := &net.TCPAddr{
+		IP:   ip,
+		Port: int(port),
 	}
 
 	conn, err := net.DialTCP("tcp", nil, address)

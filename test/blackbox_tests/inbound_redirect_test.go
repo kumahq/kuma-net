@@ -14,36 +14,41 @@ import (
 	"github.com/kumahq/kuma-net/test/framework/tcp"
 )
 
-var _ = Describe("Inbound TCP traffic from all ports", func() {
+var _ = Describe("Inbound TCP traffic from any ports", func() {
 	var err error
 	var ns *netns.NetNS
-	var tcpServerPort uint16
 
 	BeforeEach(func() {
-		DeferCleanup(ns.Cleanup)
-
-		tcpServerPort = socket.GenFreeRandomPort()
-
 		ns, err = netns.NewNetNSBuilder().Build()
 		Expect(err).To(BeNil())
 	})
 
-	DescribeTable("should be redirected to outbound port",
-		func(port uint16) {
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to the inbound_redirection port",
+		func(serverPort, randomPort uint16) {
 			// given
-			tcpServerAddress := fmt.Sprintf(":%d", tcpServerPort)
+			tcpServerAddress := fmt.Sprintf(":%d", serverPort)
 			peerAddress := ns.Veth().PeerAddress()
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Inbound: config.TrafficFlow{
-						Port: tcpServerPort,
+						Port: serverPort,
 					},
 				},
 				RuntimeOutput: ioutil.Discard,
 			}
 
-			tcpReadyC, tcpErrC := ns.StartTCPServer(tcpServerAddress, tcp.ReplyWithOriginalDst)
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				tcpServerAddress,
+				tcp.ReplyWithOriginalDst,
+				tcp.CloseConn,
+			)
 			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
 
 			// when
 			Eventually(ns.UnsafeExec(func() {
@@ -51,19 +56,28 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 			})).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, port)).
-				To(Equal(fmt.Sprintf("%s:%d", peerAddress, port)))
+			Expect(tcp.DialAndGetReply(peerAddress, randomPort)).
+				To(Equal(fmt.Sprintf("%s:%d", peerAddress, randomPort)))
 
 			// and, then
 			Consistently(tcpErrC).ShouldNot(Receive())
 		},
 		func() []TableEntry {
-			ports := socket.GenerateRandomPorts(50, tcpServerPort)
-			desc := fmt.Sprintf("to port %d, from port %%d", tcpServerPort)
-
 			var entries []TableEntry
-			for port := range ports {
-				entries = append(entries, Entry(EntryDescription(desc), port))
+			var lockedPorts []uint16
+
+			for i := 0; i < 50; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+				)
+				entries = append(entries, entry)
 			}
 
 			return entries
@@ -71,28 +85,26 @@ var _ = Describe("Inbound TCP traffic from all ports", func() {
 	)
 })
 
-var _ = Describe("Inbound TCP traffic from all ports except excluded ones", func() {
+var _ = Describe("Inbound TCP traffic from any ports except excluded ones", func() {
 	var err error
 	var ns *netns.NetNS
-	var redirectTCPServerPort, excludedPort uint16
 
 	BeforeEach(func() {
-		DeferCleanup(ns.Cleanup)
-
-		redirectTCPServerPort = socket.GenFreeRandomPort()
-		excludedPort = socket.GenFreeRandomPort()
-
 		ns, err = netns.NewNetNSBuilder().Build()
 		Expect(err).To(BeNil())
 	})
 
-	DescribeTable("should be redirected to outbound port",
-		func(port uint16) {
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to the inbound_redirection port",
+		func(serverPort, randomPort, excludedPort uint16) {
 			// given
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Inbound: config.TrafficFlow{
-						Port:         redirectTCPServerPort,
+						Port:         serverPort,
 						ExcludePorts: []uint16{excludedPort},
 					},
 				},
@@ -100,17 +112,23 @@ var _ = Describe("Inbound TCP traffic from all ports except excluded ones", func
 			}
 			peerAddress := ns.Veth().PeerAddress()
 
-			redirectReadyC, redirectErrC := ns.StartTCPServer(
-				fmt.Sprintf(":%d", redirectTCPServerPort),
+			redirectReadyC, redirectErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", serverPort),
 				tcp.ReplyWithOriginalDst,
+				tcp.CloseConn,
 			)
 			Eventually(redirectReadyC).Should(BeClosed())
+			Consistently(redirectErrC).ShouldNot(Receive())
 
-			excludedReadyC, excludedErrC := ns.StartTCPServer(
+			excludedReadyC, excludedErrC := tcp.UnsafeStartTCPServer(
+				ns,
 				fmt.Sprintf(":%d", excludedPort),
 				tcp.ReplyWith("foobar"),
+				tcp.CloseConn,
 			)
 			Eventually(excludedReadyC).Should(BeClosed())
+			Consistently(excludedErrC).ShouldNot(Receive())
 
 			// when
 			Eventually(ns.UnsafeExec(func() {
@@ -120,19 +138,31 @@ var _ = Describe("Inbound TCP traffic from all ports except excluded ones", func
 			// then
 			Expect(tcp.DialAndGetReply(peerAddress, excludedPort)).To(Equal("foobar"))
 
-			Expect(tcp.DialAndGetReply(peerAddress, port)).
-				To(Equal(fmt.Sprintf("%s:%d", peerAddress, port)))
+			// then
+			Expect(tcp.DialAndGetReply(peerAddress, randomPort)).
+				To(Equal(fmt.Sprintf("%s:%d", peerAddress, randomPort)))
 
-			Consistently(redirectErrC).ShouldNot(Receive())
-			Consistently(excludedErrC).ShouldNot(Receive())
+			// then
+			Eventually(redirectErrC).Should(BeClosed())
+			Eventually(excludedErrC).Should(BeClosed())
 		},
 		func() []TableEntry {
-			ports := socket.GenerateRandomPorts(50, redirectTCPServerPort)
-			desc := fmt.Sprintf("to port %d, from port %%d", redirectTCPServerPort)
-
 			var entries []TableEntry
-			for port := range ports {
-				entries = append(entries, Entry(EntryDescription(desc), port))
+			var lockedPorts []uint16
+
+			for i := 0; i < 50; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d (excluded: %%d)")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+					randomPorts[2],
+				)
+				entries = append(entries, entry)
 			}
 
 			return entries

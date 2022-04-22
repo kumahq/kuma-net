@@ -20,27 +20,29 @@ var _ = Describe("Outbound DNS/UDP traffic to port 53", func() {
 	var ns *netns.NetNS
 
 	BeforeEach(func() {
-		DeferCleanup(ns.Cleanup)
-
 		ns, err = netns.NewNetNSBuilder().Build()
 		Expect(err).To(BeNil())
 	})
 
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
 	DescribeTable("should be redirected to provided port",
-		func(port uint16) {
+		func(randomPort uint16) {
 			// given
 			address := udp.GenRandomAddress(consts.DNSPort)
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					DNS: config.DNS{
 						Enabled: true,
-						Port:    port,
+						Port:    randomPort,
 					},
 				},
 				RuntimeOutput: ioutil.Discard,
 			}
 
-			readyC, errC := ns.StartUDPServer(fmt.Sprintf("127.0.0.1:%d", port), 0)
+			readyC, errC := udp.UnsafeStartUDPServer(ns, fmt.Sprintf("127.0.0.1:%d", randomPort), 0)
 			Consistently(errC).ShouldNot(Receive())
 			Eventually(readyC).Should(BeClosed())
 
@@ -59,11 +61,17 @@ var _ = Describe("Outbound DNS/UDP traffic to port 53", func() {
 			Eventually(errC).Should(BeClosed())
 		},
 		func() []TableEntry {
-			ports := socket.GenerateRandomPorts(50, consts.DNSPort)
-
 			var entries []TableEntry
-			for port := range ports {
-				entries = append(entries, Entry(EntryDescription("to port %d, from port 53"), port))
+			lockedPorts := []uint16{consts.DNSPort}
+
+			for i := 0; i < 50; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(1, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
+				entry := Entry(EntryDescription(desc), randomPorts[0])
+				entries = append(entries, entry)
 			}
 
 			return entries

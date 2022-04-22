@@ -127,6 +127,13 @@ func ifaceContainsAddress(addresses []*net.IPNet, address net.IP) bool {
 	return false
 }
 
+func genIPNet(octet2, octet3, octet4 uint8) net.IPNet {
+	return net.IPNet{
+		IP:   net.IP{10, octet2, octet3, octet4},
+		Mask: net.CIDRMask(32, 24),
+	}
+}
+
 func genAddress(octet2, octet3, octet4 uint8) string {
 	return fmt.Sprintf("10.%d.%d.%d", octet2, octet3, octet4)
 }
@@ -253,13 +260,11 @@ func (b *Builder) Build() (*NetNS, error) {
 			ns:         newNS,
 			originalNS: originalNS,
 			veth: &Veth{
-				veth:        veth,
-				name:        veth.Name,
-				peerName:    veth.PeerName,
-				address:     genAddress(suffixA, suffixB, 1),
-				cidr:        mainCIDR,
-				peerAddress: genAddress(suffixA, suffixB, 2),
-				peerCIDR:    peerCIDR,
+				veth:      veth,
+				name:      veth.Name,
+				peerName:  veth.PeerName,
+				ipNet:     genIPNet(suffixA, suffixB, 1),
+				peerIPNet: genIPNet(suffixA, suffixB, 2),
 			},
 		}
 

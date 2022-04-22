@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-func GenFreeRandomPort() uint16 {
-	var port uint16
+func GenerateRandomPortsSlice(num uint, restrictedPort ...uint16) []uint16 {
+	var ports []uint16
 
-	for p := range GenerateRandomPorts(1) {
-		port = p
+	for port := range GenerateRandomPorts(num, restrictedPort...) {
+		ports = append(ports, port)
 	}
 
-	return port
+	return ports
 }
 
 func GenerateRandomPorts(num uint, restrictedPort ...uint16) map[uint16]struct{} {

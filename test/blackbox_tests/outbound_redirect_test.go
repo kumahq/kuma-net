@@ -18,32 +18,37 @@ import (
 var _ = Describe("Outbound TCP traffic to any address:port", func() {
 	var err error
 	var ns *netns.NetNS
-	var tcpServerPort uint16
 
 	BeforeEach(func() {
-		DeferCleanup(ns.Cleanup)
-
-		tcpServerPort = socket.GenFreeRandomPort()
-
 		ns, err = netns.NewNetNSBuilder().Build()
 		Expect(err).To(BeNil())
 	})
 
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
 	DescribeTable("should be redirected to outbound port",
-		func(port uint16) {
+		func(serverPort, randomPort uint16) {
 			// given
-			address := fmt.Sprintf(":%d", tcpServerPort)
+			address := fmt.Sprintf(":%d", serverPort)
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Outbound: config.TrafficFlow{
-						Port: tcpServerPort,
+						Port: serverPort,
 					},
 				},
 				RuntimeOutput: ioutil.Discard,
 			}
 
-			tcpReadyC, tcpErrC := ns.StartTCPServer(address, tcp.ReplyWithOriginalDst)
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				address,
+				tcp.ReplyWithOriginalDst,
+				tcp.CloseConn,
+			)
 			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
 
 			// when
 			Eventually(ns.UnsafeExec(func() {
@@ -52,21 +57,31 @@ var _ = Describe("Outbound TCP traffic to any address:port", func() {
 
 			// then
 			Eventually(ns.UnsafeExec(func() {
-				address := ip.GenRandomIPv4().String()
+				address := ip.GenRandomIPv4()
 
-				Expect(tcp.DialAndGetReply(address, port)).
-					To(Equal(fmt.Sprintf("%s:%d", address, port)))
+				Expect(tcp.DialAndGetReply(address, randomPort)).
+					To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
 			})).Should(BeClosed())
 
-			Consistently(tcpErrC).ShouldNot(Receive())
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
 		},
 		func() []TableEntry {
-			ports := socket.GenerateRandomPorts(50, tcpServerPort)
-			desc := fmt.Sprintf("to port %%d, from port %d", tcpServerPort)
-
 			var entries []TableEntry
-			for port := range ports {
-				entries = append(entries, Entry(EntryDescription(desc), port))
+			var lockedPorts []uint16
+
+			for i := 0; i < 50; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
+				// This gives us more entropy as all ports generated will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+				)
+				entries = append(entries, entry)
 			}
 
 			return entries

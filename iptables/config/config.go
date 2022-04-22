@@ -43,12 +43,22 @@ func (c Chain) GetFullName(prefix string) string {
 type Config struct {
 	Owner    Owner
 	Redirect Redirect
+	// DropInvalidPackets when set will enable configuration which should drop
+	// packets in invalid states
+	DropInvalidPackets bool
 	// RuntimeOutput is the place where Any debugging, runtime information
 	// will be placed (os.Stdout by default)
 	RuntimeOutput io.Writer
 	// Verbose when set will generate iptables configuration with longer
 	// argument/flag names, additional comments etc.
 	Verbose bool
+}
+
+// ShouldDropInvalidPackets is just a convenience function which can be used in
+// iptables conditional command generations instead of inlining anonymous functions
+// i.e. AppendIf(ShouldDropInvalidPackets(), Match(...), Jump(Drop()))
+func (c Config) ShouldDropInvalidPackets() bool {
+	return c.DropInvalidPackets
 }
 
 func defaultConfig() Config {
@@ -133,6 +143,9 @@ func MergeConfigWithDefaults(cfg Config) Config {
 	if cfg.Redirect.DNS.Port != 0 {
 		result.Redirect.DNS.Port = cfg.Redirect.DNS.Port
 	}
+
+	// .DropInvalidPackets
+	result.DropInvalidPackets = cfg.DropInvalidPackets
 
 	// .RuntimeOutput
 	if cfg.RuntimeOutput != nil {

@@ -40,3 +40,7 @@ func ToPort(port uint16) *JumpParameter {
 func Return() *JumpParameter {
 	return &JumpParameter{parameters: []string{"RETURN"}}
 }
+
+func Drop() *JumpParameter {
+	return &JumpParameter{parameters: []string{"DROP"}}
+}

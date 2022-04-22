@@ -66,7 +66,7 @@ var _ = Describe("Outbound DNS/UDP traffic to port 53", func() {
 
 			for i := 0; i < 50; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(1, lockedPorts...)
-				// This gives us more entropy as all ports generated will be
+				// This gives us more entropy as all generated ports will be
 				// different from each other
 				lockedPorts = append(lockedPorts, randomPorts...)
 				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)

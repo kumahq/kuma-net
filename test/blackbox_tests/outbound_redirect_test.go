@@ -72,7 +72,7 @@ var _ = Describe("Outbound TCP traffic to any address:port", func() {
 
 			for i := 0; i < 50; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
-				// This gives us more entropy as all ports generated will be
+				// This gives us more entropy as all generated ports will be
 				// different from each other
 				lockedPorts = append(lockedPorts, randomPorts...)
 				desc := fmt.Sprintf("to port %%d, from port %%d")

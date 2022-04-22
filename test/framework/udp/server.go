@@ -93,8 +93,7 @@ func UnsafeStartUDPServer(
 			errorC <- fmt.Errorf("cannot read from udp: %s", err)
 		}
 
-		_, err = udpConn.WriteToUDP(buf[:n], clientAddr)
-		if err != nil {
+		if _, err := udpConn.WriteToUDP(buf[:n], clientAddr); err != nil {
 			errorC <- fmt.Errorf("cannot write to udp: %s", err)
 		}
 

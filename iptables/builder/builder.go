@@ -14,14 +14,20 @@ import (
 )
 
 type IPTables struct {
-	raw *table.RawTable
-	nat *table.NatTable
+	raw    *table.RawTable
+	nat    *table.NatTable
+	mangle *table.MangleTable
 }
 
-func newIPTables(raw *table.RawTable, nat *table.NatTable) *IPTables {
+func newIPTables(
+	raw *table.RawTable,
+	nat *table.NatTable,
+	mangle *table.MangleTable,
+) *IPTables {
 	return &IPTables{
-		raw: raw,
-		nat: nat,
+		raw:    raw,
+		nat:    nat,
+		mangle: mangle,
 	}
 }
 
@@ -36,6 +42,11 @@ func (t *IPTables) Build(verbose bool) string {
 	nat := t.nat.Build(verbose)
 	if nat != "" {
 		tables = append(tables, nat)
+	}
+
+	mangle := t.mangle.Build(verbose)
+	if mangle != "" {
+		tables = append(tables, mangle)
 	}
 
 	separator := "\n"
@@ -57,6 +68,7 @@ func BuildIPTables(cfg config.Config) (string, error) {
 	return newIPTables(
 		buildRawTable(cfg),
 		buildNatTable(cfg, loopbackIface.Name),
+		buildMangleTable(cfg),
 	).Build(cfg.Verbose), nil
 }
 

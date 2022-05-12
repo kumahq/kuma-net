@@ -46,6 +46,8 @@ type Config struct {
 	// DropInvalidPackets when set will enable configuration which should drop
 	// packets in invalid states
 	DropInvalidPackets bool
+	// IPv6 when set will be used to configure iptables as well as ip6tables
+	IPv6 bool
 	// RuntimeOutput is the place where Any debugging, runtime information
 	// will be placed (os.Stdout by default)
 	RuntimeOutput io.Writer
@@ -80,8 +82,10 @@ func defaultConfig() Config {
 			},
 			DNS: DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: false},
 		},
-		RuntimeOutput: os.Stdout,
-		Verbose:       true,
+		DropInvalidPackets: false,
+		IPv6:               false,
+		RuntimeOutput:      os.Stdout,
+		Verbose:            true,
 	}
 }
 
@@ -146,6 +150,9 @@ func MergeConfigWithDefaults(cfg Config) Config {
 
 	// .DropInvalidPackets
 	result.DropInvalidPackets = cfg.DropInvalidPackets
+
+	// .IPv6
+	result.IPv6 = cfg.IPv6
 
 	// .RuntimeOutput
 	if cfg.RuntimeOutput != nil {

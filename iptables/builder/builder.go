@@ -57,7 +57,7 @@ func (t *IPTables) Build(verbose bool) string {
 	return strings.Join(tables, separator) + "\n"
 }
 
-func BuildIPTables(cfg config.Config) (string, error) {
+func BuildIPTables(cfg config.Config, ipv6 bool) (string, error) {
 	cfg = config.MergeConfigWithDefaults(cfg)
 
 	loopbackIface, err := getLoopback()
@@ -67,7 +67,7 @@ func BuildIPTables(cfg config.Config) (string, error) {
 
 	return newIPTables(
 		buildRawTable(cfg),
-		buildNatTable(cfg, loopbackIface.Name),
+		buildNatTable(cfg, loopbackIface.Name, ipv6),
 		buildMangleTable(cfg),
 	).Build(cfg.Verbose), nil
 }
@@ -76,8 +76,6 @@ func BuildIPTables(cfg config.Config) (string, error) {
 // rules for used to see and debug if something goes wrong, which can be overwritten
 // in tests to not obfuscate the other, more relevant logs
 func saveIPTablesRestoreFile(runtimeOutput io.Writer, f *os.File, content string) error {
-	defer f.Close()
-
 	_, _ = fmt.Fprintln(runtimeOutput, "Writing following contents to rules file: ", f.Name())
 	_, _ = fmt.Fprintln(runtimeOutput, content)
 
@@ -90,17 +88,43 @@ func saveIPTablesRestoreFile(runtimeOutput io.Writer, f *os.File, content string
 	return writer.Flush()
 }
 
-func RestoreIPTables(cfg config.Config) (string, error) {
+func createRulesFile(ipv6 bool) (*os.File, error) {
+	iptables := "iptables"
+	if ipv6 {
+		iptables = "ip6tables"
+	}
+
+	filename := fmt.Sprintf("%s-rules-%d.txt", iptables, time.Now().UnixNano())
+
+	f, err := os.CreateTemp("", filename)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create %s rules file: %s", iptables, err)
+	}
+
+	return f, nil
+}
+
+func runRestoreCmd(cmdName string, f *os.File) (string, error) {
+	cmd := exec.Command(cmdName, "--noflush", f.Name())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("executing command failed: %s (with output: %q)", err, output)
+	}
+
+	return string(output), nil
+}
+
+func restoreIPTables(cfg config.Config, ipv6 bool) (string, error) {
 	cfg = config.MergeConfigWithDefaults(cfg)
 
-	filename := fmt.Sprintf("iptables-rules-%d.txt", time.Now().UnixNano())
-	rulesFile, err := os.CreateTemp("", filename)
+	rulesFile, err := createRulesFile(cfg.IPv6)
 	if err != nil {
-		return "", fmt.Errorf("unable to create iptables-restore file: %s", err)
+		return "", err
 	}
+	defer rulesFile.Close()
 	defer os.Remove(rulesFile.Name())
 
-	rules, err := BuildIPTables(cfg)
+	rules, err := BuildIPTables(cfg, ipv6)
 	if err != nil {
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
 	}
@@ -109,11 +133,30 @@ func RestoreIPTables(cfg config.Config) (string, error) {
 		return "", fmt.Errorf("unable to save iptables restore file: %s", err)
 	}
 
-	cmd := exec.Command("iptables-restore", "--noflush", rulesFile.Name())
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("executing command failed: %s (with output: %q)", err, output)
+	cmdName := "iptables-restore"
+	if ipv6 {
+		cmdName = "ip6tables-restore"
 	}
 
-	return string(output), nil
+	return runRestoreCmd(cmdName, rulesFile)
+}
+
+// RestoreIPTables
+// TODO (bartsmykla): add validation if ip{,6}tables are available
+func RestoreIPTables(cfg config.Config) (string, error) {
+	output, err := restoreIPTables(cfg, false)
+	if err != nil {
+		return "", fmt.Errorf("cannot restore ipv4 iptable rules: %s", err)
+	}
+
+	if cfg.IPv6 {
+		ipv6Output, err := restoreIPTables(cfg, true)
+		if err != nil {
+			return "", fmt.Errorf("cannot restore ipv6 iptable rules: %s", err)
+		}
+
+		output += ipv6Output
+	}
+
+	return output, nil
 }

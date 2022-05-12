@@ -14,8 +14,8 @@ func (p *DestinationParameter) Negate() ParameterBuilder {
 
 func destination(address string, negative bool) *Parameter {
 	return &Parameter{
-		long:       "--source",
-		short:      "-s",
+		long:       "--destination",
+		short:      "-d",
 		parameters: []ParameterBuilder{&DestinationParameter{address: address}},
 		negate:     negateSelf,
 		negative:   negative,

@@ -27,7 +27,7 @@ func buildMeshInbound(cfg config.TrafficFlow, prefix string, meshInboundRedirect
 	return meshInbound
 }
 
-func buildMeshOutbound(cfg config.Config, loopback string) *Chain {
+func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
@@ -38,20 +38,41 @@ func buildMeshOutbound(cfg config.Config, loopback string) *Chain {
 	uid := cfg.Owner.UID
 	gid := cfg.Owner.GID
 
+	localhost := LocalhostCIDRIPv4
+	inboundPassthroughSourceAddress := InboundPassthroughSourceAddressCIDRIPv4
+	if ipv6 {
+		inboundPassthroughSourceAddress = InboundPassthroughSourceAddressCIDRIPv6
+		localhost = LocalhostCIDRIPv6
+	}
+
 	meshOutbound := NewChain(outboundChainName).
-		// when tcp_packet to 192.168.0.10:7777 arrives ⤸
-		// iptables#nat
-		//   PREROUTING ⤸
-		//   MESH_INBOUND ⤸
-		//   MESH_INBOUND_REDIRECT ⤸
-		// envoy@15006 ⤸
-		//   listener#inbound:passthrough:ipv4 ⤸
-		//   cluster#inbound:passthrough:ipv4 (source_ip 127.0.0.6) ⤸
-		//   listener#192.168.0.10:7777 ⤸
-		//   cluster#localhost:7777 ⤸
-		// localhost:7777
+		// ipv4:
+		//   when tcp_packet to 192.168.0.10:7777 arrives ⤸
+		//   iptables#nat ⤸
+		//     PREROUTING ⤸
+		//     MESH_INBOUND ⤸
+		//     MESH_INBOUND_REDIRECT ⤸
+		//   envoy@15006 ⤸
+		//     listener#inbound:passthrough:ipv4 ⤸
+		//     cluster#inbound:passthrough:ipv4 (source_ip 127.0.0.6) ⤸
+		//     listener#192.168.0.10:7777 ⤸
+		//     cluster#localhost:7777 ⤸
+		//   localhost:7777
+		//
+		// ipv6:
+		//   when tcp_packet to [fd00::0:10]:7777 arrives ⤸
+		//   ip6tables#nat ⤸
+		//     PREROUTING ⤸
+		//     MESH_INBOUND ⤸
+		//     MESH_INBOUND_REDIRECT ⤸
+		//   envoy@15006 ⤸
+		//     listener#inbound:passthrough:ipv6 ⤸
+		//     cluster#inbound:passthrough:ipv6 (source_ip ::6) ⤸
+		//     listener#[fd00::0:10]:7777 ⤸
+		//     cluster#localhost:7777 ⤸
+		//   localhost:7777
 		Append(
-			Source(Address(InboundPassthroughIPv4SourceAddress)),
+			Source(Address(inboundPassthroughSourceAddress)),
 			OutInterface(loopback),
 			Jump(Return()),
 		)
@@ -69,7 +90,7 @@ func buildMeshOutbound(cfg config.Config, loopback string) *Chain {
 		Append(
 			Protocol(Tcp(NotDestinationPortIf(shouldRedirectDNS, DNSPort))),
 			OutInterface(loopback),
-			NotDestination(Localhost),
+			NotDestination(localhost),
 			Match(Owner(Uid(uid))),
 			Jump(ToUserDefinedChain(inboundRedirectChainName)),
 		).
@@ -87,7 +108,7 @@ func buildMeshOutbound(cfg config.Config, loopback string) *Chain {
 		Append(
 			Protocol(Tcp(NotDestinationPortIf(shouldRedirectDNS, DNSPort))),
 			OutInterface(loopback),
-			NotDestination(Localhost),
+			NotDestination(localhost),
 			Match(Owner(Gid(gid))),
 			Jump(ToUserDefinedChain(inboundRedirectChainName)),
 		).
@@ -106,7 +127,7 @@ func buildMeshOutbound(cfg config.Config, loopback string) *Chain {
 			Jump(ToPort(dnsRedirectPort)),
 		).
 		Append(
-			Destination(Localhost),
+			Destination(localhost),
 			Jump(Return()),
 		).
 		Append(
@@ -124,7 +145,7 @@ func buildMeshRedirect(chainName string, redirectPort uint16) *Chain {
 		)
 }
 
-func buildNatTable(cfg config.Config, loopback string) *table.NatTable {
+func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTable {
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
@@ -171,7 +192,7 @@ func buildNatTable(cfg config.Config, loopback string) *table.NatTable {
 	meshInboundRedirect := buildMeshRedirect(inboundRedirectChainName, inboundRedirectPort)
 
 	// MESH_OUTBOUND
-	meshOutbound := buildMeshOutbound(cfg, loopback)
+	meshOutbound := buildMeshOutbound(cfg, loopback, ipv6)
 
 	// MESH_OUTBOUND_REDIRECT
 	meshOutboundRedirect := buildMeshRedirect(outboundRedirectChainName, outboundRedirectPort)

@@ -5,6 +5,7 @@ import (
 	"math"
 	"net"
 	"runtime"
+	"strconv"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -27,10 +28,17 @@ func newVeth(nameSeed string, suffixA, suffixB uint8) *netlink.Veth {
 
 type Builder struct {
 	nameSeed string
+	ipv6     bool
 }
 
 func (b *Builder) WithNameSeed(seed string) *Builder {
 	b.nameSeed = seed
+
+	return b
+}
+
+func (b *Builder) WithIPv6(value bool) *Builder {
+	b.ipv6 = value
 
 	return b
 }
@@ -127,19 +135,32 @@ func ifaceContainsAddress(addresses []*net.IPNet, address net.IP) bool {
 	return false
 }
 
-func genIPNet(octet2, octet3, octet4 uint8) net.IPNet {
-	return net.IPNet{
+func genIPv4IPNet(octet2, octet3, octet4 uint8) *net.IPNet {
+	return &net.IPNet{
 		IP:   net.IP{10, octet2, octet3, octet4},
-		Mask: net.CIDRMask(32, 24),
+		Mask: net.CIDRMask(24, 32),
 	}
 }
 
-func genAddress(octet2, octet3, octet4 uint8) string {
-	return fmt.Sprintf("10.%d.%d.%d", octet2, octet3, octet4)
+func genIPv6IPNet(octet1, octet2, octet3 uint8) *net.IPNet {
+	hex6 := strconv.FormatInt(int64(octet1), 16)
+	hex7 := strconv.FormatInt(int64(octet2), 16)
+	hex8 := strconv.FormatInt(int64(octet3), 16)
+
+	address := fmt.Sprintf("fd00::%s:%s:%s", hex6, hex7, hex8)
+
+	return &net.IPNet{
+		IP:   net.ParseIP(address),
+		Mask: net.CIDRMask(64, 128),
+	}
 }
 
-func genCIDRAddress(octet2, octet3, octet4 uint8) string {
-	return fmt.Sprintf("%s/24", genAddress(octet2, octet3, octet4))
+func genIPNet(ipv6 bool, octet1, octet2, octet3 uint8) *net.IPNet {
+	if ipv6 {
+		return genIPv6IPNet(octet1, octet2, octet3)
+	}
+
+	return genIPv4IPNet(octet1, octet2, octet3)
 }
 
 func genNetNSName(nameSeed string, suffixA, suffixB uint8) string {
@@ -176,8 +197,8 @@ func (b *Builder) Build() (*NetNS, error) {
 			done <- fmt.Errorf("cannot get main veth interface: %s", err)
 		}
 
-		mainCIDR := genCIDRAddress(suffixA, suffixB, 1)
-		mainAddr, err := netlink.ParseAddr(mainCIDR)
+		mainIPNet := genIPNet(b.ipv6, suffixA, suffixB, 1)
+		mainAddr, err := netlink.ParseAddr(mainIPNet.String())
 		if err != nil {
 			done <- fmt.Errorf("cannot parse main veth interface address: %s", err)
 		}
@@ -233,8 +254,8 @@ func (b *Builder) Build() (*NetNS, error) {
 			done <- fmt.Errorf("cannot switch to new network interface: %s", err)
 		}
 
-		peerCIDR := genCIDRAddress(suffixA, suffixB, 2)
-		peerAddr, err := netlink.ParseAddr(peerCIDR)
+		peerIPNet := genIPNet(b.ipv6, suffixA, suffixB, 2)
+		peerAddr, err := netlink.ParseAddr(peerIPNet.String())
 		if err != nil {
 			done <- fmt.Errorf("cannot parse peer veth interface address: %s", err)
 		}
@@ -263,8 +284,8 @@ func (b *Builder) Build() (*NetNS, error) {
 				veth:      veth,
 				name:      veth.Name,
 				peerName:  veth.PeerName,
-				ipNet:     genIPNet(suffixA, suffixB, 1),
-				peerIPNet: genIPNet(suffixA, suffixB, 2),
+				ipNet:     mainIPNet,
+				peerIPNet: peerIPNet,
 			},
 		}
 

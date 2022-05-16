@@ -11,22 +11,37 @@ import (
 	"github.com/kumahq/kuma-net/test/framework/tcp/socket_options"
 )
 
-// CloseConn will run CloseWrite member function on provided as a parameter
-// *net.TCPConn
+// CloseConn will run Close member function on provided as a parameter *net.TCPConn
 func CloseConn(conn *net.TCPConn) {
-	_ = conn.CloseWrite()
+	_ = conn.Close()
 }
 
-// ReplyWithOriginalDst will send to provided *net.TCPConn extracted
-// from the socket's original destination (as []byte) of the connection
-// if extraction will succeed, and the error message (as []byte) otherwise
-func ReplyWithOriginalDst(conn *net.TCPConn) {
-	originalDst, err := socket_options.ExtractOriginalDst(conn)
+func replyWithOriginalDst(conn *net.TCPConn, ipv6 bool) {
+	msg := []byte("no original destination")
+
+	originalDst, err := socket_options.ExtractOriginalDst(conn, ipv6)
 	if err != nil {
-		_, _ = conn.Write([]byte(err.Error()))
-	} else {
-		_, _ = conn.Write(originalDst.Bytes())
+		msg = []byte(err.Error())
+	} else if originalDst != nil {
+		msg = originalDst.Bytes()
 	}
+	_, _ = conn.Write(msg)
+}
+
+// ReplyWithOriginalDstIPv4 will try to extract original destination from
+// the IPv4 socket of the provided *net.TCPConn and send it back as a []byte,
+// if the extraction will fail, the *net.TCPConn will receive error message
+// as []byte instead
+func ReplyWithOriginalDstIPv4(conn *net.TCPConn) {
+	replyWithOriginalDst(conn, false)
+}
+
+// ReplyWithOriginalDstIPv6 will try to extract original destination from
+// the IPv6 socket of the provided *net.TCPConn and send it back as a []byte,
+// if the extraction will fail, the *net.TCPConn will receive error message
+// as []byte instead
+func ReplyWithOriginalDstIPv6(conn *net.TCPConn) {
+	replyWithOriginalDst(conn, true)
 }
 
 // ReplyWith will return a function which will send to provided *net.TCPConn

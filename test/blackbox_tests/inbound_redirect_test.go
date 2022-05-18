@@ -9,6 +9,7 @@ import (
 
 	"github.com/kumahq/kuma-net/iptables/builder"
 	"github.com/kumahq/kuma-net/iptables/config"
+	"github.com/kumahq/kuma-net/test/blackbox_tests"
 	"github.com/kumahq/kuma-net/test/framework/netns"
 	"github.com/kumahq/kuma-net/test/framework/socket"
 	"github.com/kumahq/kuma-net/test/framework/tcp"
@@ -56,7 +57,7 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports", func() {
 			})).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, randomPort)).
+			Expect(tcp.DialIPWithPortAndGetReply(peerAddress, randomPort)).
 				To(Equal(fmt.Sprintf("%s:%d", peerAddress, randomPort)))
 
 			// and, then
@@ -66,7 +67,7 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports", func() {
 			var entries []TableEntry
 			var lockedPorts []uint16
 
-			for i := 0; i < 50; i++ {
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
 				// This gives us more entropy as all generated ports will be
 				// different from each other
@@ -128,7 +129,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports", func() {
 			})).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, randomPort)).
+			Expect(tcp.DialIPWithPortAndGetReply(peerAddress, randomPort)).
 				To(Equal(fmt.Sprintf("[%s]:%d", peerAddress, randomPort)))
 
 			// and, then
@@ -138,7 +139,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports", func() {
 			var entries []TableEntry
 			var lockedPorts []uint16
 
-			for i := 0; i < 50; i++ {
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
 				// This gives us more entropy as all generated ports will be
 				// different from each other
@@ -208,10 +209,10 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports except excluded ones",
 			})).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, excludedPort)).To(Equal("foobar"))
+			Expect(tcp.DialIPWithPortAndGetReply(peerAddress, excludedPort)).To(Equal("foobar"))
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, randomPort)).
+			Expect(tcp.DialIPWithPortAndGetReply(peerAddress, randomPort)).
 				To(Equal(fmt.Sprintf("%s:%d", peerAddress, randomPort)))
 
 			// then
@@ -222,7 +223,7 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports except excluded ones",
 			var entries []TableEntry
 			var lockedPorts []uint16
 
-			for i := 0; i < 50; i++ {
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
 				// This gives us more entropy as all generated ports will be
 				// different from each other
@@ -294,10 +295,10 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports except excluded ones",
 			})).Should(BeClosed())
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, excludedPort)).To(Equal("foobar"))
+			Expect(tcp.DialIPWithPortAndGetReply(peerAddress, excludedPort)).To(Equal("foobar"))
 
 			// then
-			Expect(tcp.DialAndGetReply(peerAddress, randomPort)).
+			Expect(tcp.DialIPWithPortAndGetReply(peerAddress, randomPort)).
 				To(Equal(fmt.Sprintf("[%s]:%d", peerAddress, randomPort)))
 
 			// then
@@ -308,7 +309,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports except excluded ones",
 			var entries []TableEntry
 			var lockedPorts []uint16
 
-			for i := 0; i < 50; i++ {
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
 				// This gives us more entropy as all generated ports will be
 				// different from each other

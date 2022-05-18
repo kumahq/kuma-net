@@ -29,6 +29,14 @@ func newVeth(nameSeed string, suffixA, suffixB uint8) *netlink.Veth {
 type Builder struct {
 	nameSeed string
 	ipv6     bool
+	// beforeExecFuncs are functions which should be run whenever we want to execute
+	// anything inside the network namespace. For example if we want to test
+	// the dns conntrack zone splitting we have to reduce the amount of available
+	// local ports by writing to /proc/sys/net/ipv4/ip_local_port_range
+	// (equivalent of `echo "32768   32770" > /proc/sys/net/ipv4/ip_local_port_range`).
+	// By doing so we have to remember that this change is ephemeral and will be
+	// applied only for the locked goroutine which it was invoked from
+	beforeExecFuncs []func() error
 }
 
 func (b *Builder) WithNameSeed(seed string) *Builder {
@@ -39,6 +47,12 @@ func (b *Builder) WithNameSeed(seed string) *Builder {
 
 func (b *Builder) WithIPv6(value bool) *Builder {
 	b.ipv6 = value
+
+	return b
+}
+
+func (b *Builder) WithBeforeExecFuncs(fns ...func() error) *Builder {
+	b.beforeExecFuncs = append(b.beforeExecFuncs, fns...)
 
 	return b
 }
@@ -287,6 +301,7 @@ func (b *Builder) Build() (*NetNS, error) {
 				ipNet:     mainIPNet,
 				peerIPNet: peerIPNet,
 			},
+			beforeExecFuncs: b.beforeExecFuncs,
 		}
 
 		close(done)

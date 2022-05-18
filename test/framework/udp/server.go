@@ -38,6 +38,7 @@ func UnsafeStartUDPServer(
 
 		if err := ns.Set(); err != nil {
 			errorC <- fmt.Errorf("cannot switch to the namespace: %s", err)
+			return
 		}
 		defer ns.Unset()
 

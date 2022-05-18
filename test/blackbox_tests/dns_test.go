@@ -323,10 +323,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting", func() {
 
 	BeforeEach(func() {
 		ns, err = netns.NewNetNSBuilder().
-			WithBeforeExecFuncs(
-				sysctl.SetLocalPortRange(32768, 32770),
-				sysctl.SetUnprivilegedPortStart(0),
-			).
+			WithBeforeExecFuncs(sysctl.SetLocalPortRange(32768, 32770)).
 			Build()
 		Expect(err).To(BeNil())
 	})
@@ -369,6 +366,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting", func() {
 				ns,
 				s2Address,
 				udp.ReplyWithLocalAddr,
+				sysctl.SetUnprivilegedPortStart(0),
 				syscall.SetUID(uid),
 			)
 			Consistently(s2ErrC).ShouldNot(Receive())
@@ -433,10 +431,7 @@ var _ = Describe("Outbound IPv6 DNS/UDP conntrack zone splitting", func() {
 	BeforeEach(func() {
 		ns, err = netns.NewNetNSBuilder().
 			WithIPv6(true).
-			WithBeforeExecFuncs(
-				sysctl.SetLocalPortRange(32768, 32770),
-				sysctl.SetUnprivilegedPortStart(0),
-			).
+			WithBeforeExecFuncs(sysctl.SetLocalPortRange(32768, 32770)).
 			Build()
 		Expect(err).To(BeNil())
 	})
@@ -480,6 +475,7 @@ var _ = Describe("Outbound IPv6 DNS/UDP conntrack zone splitting", func() {
 				ns,
 				s2Address,
 				udp.ReplyWithLocalAddr,
+				sysctl.SetUnprivilegedPortStart(0),
 				syscall.SetUID(uid),
 			)
 			Consistently(s2ErrC).ShouldNot(Receive())

@@ -24,16 +24,6 @@ func buildRawTable(cfg config.Config) *table.RawTable {
 			).
 			Append(
 				Protocol(Udp(DestinationPort(DNSPort))),
-				Match(Owner(Gid(cfg.Owner.GID))),
-				Jump(Ct(Zone("1"))),
-			).
-			Append(
-				Protocol(Udp(SourcePort(cfg.Redirect.DNS.Port))),
-				Match(Owner(Gid(cfg.Owner.GID))),
-				Jump(Ct(Zone("2"))),
-			).
-			Append(
-				Protocol(Udp(DestinationPort(DNSPort))),
 				Jump(Ct(Zone("2"))),
 			)
 

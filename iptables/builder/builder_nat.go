@@ -33,10 +33,8 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
 	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName(prefix)
 	excludePorts := cfg.Redirect.Outbound.ExcludePorts
-	shouldRedirectDNS := func() bool { return cfg.Redirect.DNS.Enabled }
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
-	gid := cfg.Owner.GID
 
 	localhost := LocalhostCIDRIPv4
 	inboundPassthroughSourceAddress := InboundPassthroughSourceAddressCIDRIPv4
@@ -86,16 +84,15 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 	}
 
 	meshOutbound.
-		// UID
 		Append(
-			Protocol(Tcp(NotDestinationPortIf(shouldRedirectDNS, DNSPort))),
+			Protocol(Tcp(NotDestinationPortIf(cfg.ShouldRedirectDNS, DNSPort))),
 			OutInterface(loopback),
 			NotDestination(localhost),
 			Match(Owner(Uid(uid))),
 			Jump(ToUserDefinedChain(inboundRedirectChainName)),
 		).
 		Append(
-			Protocol(Tcp(NotDestinationPortIf(shouldRedirectDNS, DNSPort))),
+			Protocol(Tcp(NotDestinationPortIf(cfg.ShouldRedirectDNS, DNSPort))),
 			OutInterface(loopback),
 			Match(Owner(NotUid(uid))),
 			Jump(Return()),
@@ -104,25 +101,7 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 			Match(Owner(Uid(uid))),
 			Jump(Return()),
 		).
-		// GID
-		Append(
-			Protocol(Tcp(NotDestinationPortIf(shouldRedirectDNS, DNSPort))),
-			OutInterface(loopback),
-			NotDestination(localhost),
-			Match(Owner(Gid(gid))),
-			Jump(ToUserDefinedChain(inboundRedirectChainName)),
-		).
-		Append(
-			Protocol(Tcp(NotDestinationPortIf(shouldRedirectDNS, DNSPort))),
-			OutInterface(loopback),
-			Match(Owner(NotGid(gid))),
-			Jump(Return()),
-		).
-		Append(
-			Match(Owner(Gid(gid))),
-			Jump(Return()),
-		).
-		AppendIf(shouldRedirectDNS,
+		AppendIf(cfg.ShouldRedirectDNS,
 			Protocol(Tcp(DestinationPort(DNSPort))),
 			Jump(ToPort(dnsRedirectPort)),
 		).
@@ -155,8 +134,6 @@ func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTabl
 	outboundRedirectPort := cfg.Redirect.Outbound.Port
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
-	gid := cfg.Owner.GID
-	shouldRedirectDNS := func() bool { return cfg.Redirect.DNS.Enabled }
 
 	nat := table.Nat()
 
@@ -166,17 +143,12 @@ func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTabl
 	)
 
 	nat.Output().
-		AppendIf(shouldRedirectDNS,
+		AppendIf(cfg.ShouldRedirectDNS,
 			Protocol(Udp(DestinationPort(DNSPort))),
 			Match(Owner(Uid(uid))),
 			Jump(Return()),
 		).
-		AppendIf(shouldRedirectDNS,
-			Protocol(Udp(DestinationPort(DNSPort))),
-			Match(Owner(Gid(gid))),
-			Jump(Return()),
-		).
-		AppendIf(shouldRedirectDNS,
+		AppendIf(cfg.ShouldRedirectDNS,
 			Protocol(Udp(DestinationPort(DNSPort))),
 			Jump(ToPort(dnsRedirectPort)),
 		).

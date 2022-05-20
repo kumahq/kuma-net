@@ -6,6 +6,7 @@ import (
 	"net"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -211,6 +212,18 @@ func (b *Builder) Build() (*NetNS, error) {
 			done <- fmt.Errorf("cannot get main veth interface: %s", err)
 		}
 
+		// peer link - interface which will be moved to the custom network namespace
+		peerLink, err := netlink.LinkByName(veth.PeerName)
+		if err != nil {
+			done <- fmt.Errorf("cannot get peer veth interface: %s", err)
+		}
+
+		peerIPNet := genIPNet(b.ipv6, suffixA, suffixB, 2)
+		peerAddr, err := netlink.ParseAddr(peerIPNet.String())
+		if err != nil {
+			done <- fmt.Errorf("cannot parse peer veth interface address: %s", err)
+		}
+
 		mainIPNet := genIPNet(b.ipv6, suffixA, suffixB, 1)
 		mainAddr, err := netlink.ParseAddr(mainIPNet.String())
 		if err != nil {
@@ -221,14 +234,24 @@ func (b *Builder) Build() (*NetNS, error) {
 			done <- fmt.Errorf("cannot add address to main veth interface: %s", err)
 		}
 
-		if err := netlink.LinkSetUp(mainLink); err != nil {
-			done <- fmt.Errorf("cannot set main veth interface up: %s", err)
+		// I tried to mitigate the problem with IPv6 2s delay (described before
+		// the end of the body of this function) by statically adding
+		// the neighbor information to the neighbor table, but it didn't fix
+		// the issue. I left it even if it doesn't fix the issue as it doesn't
+		// have any downsides, but maybe can introduce some performance benefits
+		// when running the tests, as the networking stack doesn't have to ask
+		// for the neighbor information for our veth-related addresses.
+		if err := netlink.NeighAdd(&netlink.Neigh{
+			LinkIndex:    mainLink.Attrs().Index,
+			State:        netlink.NUD_REACHABLE,
+			IP:           peerAddr.IP,
+			HardwareAddr: peerLink.Attrs().HardwareAddr,
+		}); err != nil {
+			done <- fmt.Errorf("cannot add neighbor: %s", err)
 		}
 
-		// peer link - interface which will be moved to the custom network namespace
-		peerLink, err := netlink.LinkByName(veth.PeerName)
-		if err != nil {
-			done <- fmt.Errorf("cannot get peer veth interface: %s", err)
+		if err := netlink.LinkSetUp(mainLink); err != nil {
+			done <- fmt.Errorf("cannot set main veth interface up: %s", err)
 		}
 
 		// Create a new network namespace (when creating new namespace,
@@ -268,14 +291,24 @@ func (b *Builder) Build() (*NetNS, error) {
 			done <- fmt.Errorf("cannot switch to new network interface: %s", err)
 		}
 
-		peerIPNet := genIPNet(b.ipv6, suffixA, suffixB, 2)
-		peerAddr, err := netlink.ParseAddr(peerIPNet.String())
-		if err != nil {
-			done <- fmt.Errorf("cannot parse peer veth interface address: %s", err)
-		}
-
 		if err := netlink.AddrAdd(peerLink, peerAddr); err != nil {
 			done <- fmt.Errorf("cannot add address to peer veth interface: %s", err)
+		}
+
+		// I tried to mitigate the problem with IPv6 2s delay (described before
+		// the end of the body of this function) by statically adding
+		// the neighbor information to the neighbor table, but it didn't fix
+		// the issue. I left it even if it doesn't fix the issue as it doesn't
+		// have any downsides, but maybe can introduce some performance benefits
+		// when running the tests, as the networking stack doesn't have to ask
+		// for the neighbor information for our veth-related addresses.
+		if err := netlink.NeighAdd(&netlink.Neigh{
+			LinkIndex:    peerLink.Attrs().Index,
+			State:        netlink.NUD_REACHABLE,
+			IP:           mainAddr.IP,
+			HardwareAddr: mainLink.Attrs().HardwareAddr,
+		}); err != nil {
+			done <- fmt.Errorf("cannot add peer neighbor: %s", err)
 		}
 
 		if err := netlink.LinkSetUp(peerLink); err != nil {
@@ -302,6 +335,70 @@ func (b *Builder) Build() (*NetNS, error) {
 				peerIPNet: peerIPNet,
 			},
 			beforeExecFuncs: b.beforeExecFuncs,
+		}
+
+		// When configuring network namespace with IPv6 addresses, on some
+		// machines when sending requests immediately after configuring netns
+		// they are time-outing, when on others there is 1-2s delay before
+		// receiving the response.
+		// bartsmykla: I was able to narrow down the cause to be related to
+		// IPv6 neighbor discovery, but was not able to find a real reason
+		// or a fix, so we have to introduce this delay.
+		// bartsmykla: the other observation I got is when sending requests
+		// immediately, they are going through ens5/eth0 interface instead of
+		// created by us veth main one
+		//
+		// tcpdump with the delay:
+		// 	12:14:15.019582 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:14:15.019602 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:14:15.043570 IP6 :: > ff02::1:ff4e:9e8d: ICMP6, neighbor solicitation, who has fe80::fcb3:36ff:fe4e:9e8d, length 32
+		// 	12:14:15.307566 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:14:15.339567 IP6 :: > ff02::1:ff01:1: ICMP6, neighbor solicitation, who has fd00::1:1:1, length 32
+		// 	12:14:15.467565 IP6 :: > ff02::1:ff01:2: ICMP6, neighbor solicitation, who has fd00::1:1:2, length 32
+		// 	12:14:15.787572 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:14:15.883571 IP6 :: > ff02::1:ff89:31f7: ICMP6, neighbor solicitation, who has fe80::c060:1dff:fe89:31f7, length 32
+		// 	12:14:16.075579 IP6 fe80::fcb3:36ff:fe4e:9e8d > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:14:16.075597 IP6 fe80::fcb3:36ff:fe4e:9e8d > ff02::2: ICMP6, router solicitation, length 16
+		// 	12:14:16.087559 IP6 fe80::fcb3:36ff:fe4e:9e8d > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:14:16.907600 IP6 fe80::c060:1dff:fe89:31f7 > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:14:16.907621 IP6 fe80::c060:1dff:fe89:31f7 > ff02::2: ICMP6, router solicitation, length 16
+		// 	12:14:17.130306 IP6 fd00::1:1:1.41180 > fd00::1:1:2.38469: Flags [S], seq 2227760838, win 64800, options [mss 1440,sackOK,TS val 996411593 ecr 0,nop,wscale 7], length 0
+		// 	12:14:17.130354 IP6 fd00::1:1:2.38469 > fd00::1:1:1.41180: Flags [S.], seq 2947266753, ack 2227760839, win 64260, options [mss 1440,sackOK,TS val 729905204 ecr 996411593,nop,wscale 7], length 0
+		// 	12:14:17.130366 IP6 fd00::1:1:1.41180 > fd00::1:1:2.38469: Flags [.], ack 1, win 507, options [nop,nop,TS val 996411593 ecr 729905204], length 0
+		// 	12:14:17.130533 IP6 fd00::1:1:2.38469 > fd00::1:1:1.41180: Flags [P.], seq 1:20, ack 1, win 503, options [nop,nop,TS val 729905204 ecr 996411593], length 19
+		// 	12:14:17.130554 IP6 fd00::1:1:1.41180 > fd00::1:1:2.38469: Flags [.], ack 20, win 507, options [nop,nop,TS val 996411593 ecr 729905204], length 0
+		// 	12:14:17.130566 IP6 fd00::1:1:2.38469 > fd00::1:1:1.41180: Flags [F.], seq 20, ack 1, win 503, options [nop,nop,TS val 729905204 ecr 996411593], length 0
+		// 	12:14:17.130602 IP6 fd00::1:1:1.41180 > fd00::1:1:2.38469: Flags [F.], seq 1, ack 21, win 507, options [nop,nop,TS val 996411593 ecr 729905204], length 0
+		// 	12:14:17.130608 IP6 fd00::1:1:2.38469 > fd00::1:1:1.41180: Flags [.], ack 2, win 503, options [nop,nop,TS val 729905204 ecr 996411593], length 0
+		//
+		// tcpdump without the delay:
+		// 	12:17:06.899580 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:06.899606 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:07.010366 IP6 fe80::808:89ff:fe5c:d9df.48138 > fd00::1:1:2.35895: Flags [S], seq 3993000731, win 64800, options [mss 1440,sackOK,TS val 4294921797 ecr 0,nop,wscale 7], length 0
+		// 	12:17:07.019578 IP6 :: > ff02::1:ff01:2: ICMP6, neighbor solicitation, who has fd00::1:1:2, length 32
+		// 	12:17:07.071570 IP6 :: > ff02::1:ff01:1: ICMP6, neighbor solicitation, who has fd00::1:1:1, length 32
+		// 	12:17:07.307569 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:07.403576 IP6 :: > ff02::1:ffed:1fcf: ICMP6, neighbor solicitation, who has fe80::f087:56ff:feed:1fcf, length 32
+		// 	12:17:07.435566 IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:07.659570 IP6 :: > ff02::1:ff14:5ba3: ICMP6, neighbor solicitation, who has fe80::5c9b:e6ff:fe14:5ba3, length 32
+		// 	12:17:08.011565 IP6 fe80::808:89ff:fe5c:d9df.48138 > fd00::1:1:2.35895: Flags [S], seq 3993000731, win 64800, options [mss 1440,sackOK,TS val 4294922798 ecr 0,nop,wscale 7], length 0
+		// 	12:17:08.427598 IP6 fe80::f087:56ff:feed:1fcf > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:08.427620 IP6 fe80::f087:56ff:feed:1fcf > ff02::2: ICMP6, router solicitation, length 16
+		// 	12:17:08.679570 IP6 fe80::f087:56ff:feed:1fcf > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:08.683581 IP6 fe80::5c9b:e6ff:fe14:5ba3 > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:08.683595 IP6 fe80::5c9b:e6ff:fe14:5ba3 > ff02::2: ICMP6, router solicitation, length 16
+		// 	12:17:09.163572 IP6 fe80::5c9b:e6ff:fe14:5ba3 > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+		// 	12:17:10.027570 IP6 fe80::808:89ff:fe5c:d9df.48138 > fd00::1:1:2.35895: Flags [S], seq 3993000731, win 64800, options [mss 1440,sackOK,TS val 4294924814 ecr 0,nop,wscale 7], length 0
+		// 	12:17:10.027620 IP6 fd00::1:1:2 > ff02::1:ff5c:d9df: ICMP6, neighbor solicitation, who has fe80::808:89ff:fe5c:d9df, length 32
+		// 	12:17:11.051572 IP6 fd00::1:1:2 > ff02::1:ff5c:d9df: ICMP6, neighbor solicitation, who has fe80::808:89ff:fe5c:d9df, length 32
+		// 	12:17:12.075570 IP6 fd00::1:1:2 > ff02::1:ff5c:d9df: ICMP6, neighbor solicitation, who has fe80::808:89ff:fe5c:d9df, length 32
+		// 	12:17:12.299565 IP6 fe80::f087:56ff:feed:1fcf > ff02::2: ICMP6, router solicitation, length 16
+		// 	12:17:12.555561 IP6 fe80::5c9b:e6ff:fe14:5ba3 > ff02::2: ICMP6, router solicitation, length 16
+		// 	12:17:14.091569 IP6 fe80::808:89ff:fe5c:d9df.48138 > fd00::1:1:2.35895: Flags [S], seq 3993000731, win 64800, options [mss 1440,sackOK,TS val 4294928878 ecr 0,nop,wscale 7], length 0
+		// 	12:17:14.091607 IP6 fd00::1:1:2 > ff02::1:ff5c:d9df: ICMP6, neighbor solicitation, who has fe80::808:89ff:fe5c:d9df, length 32
+		// 	12:17:15.115566 IP6 fd00::1:1:2 > ff02::1:ff5c:d9df: ICMP6, neighbor solicitation, who has fe80::808:89ff:fe5c:d9df, length 32
+		if b.ipv6 {
+			time.Sleep(2 * time.Second)
 		}
 
 		close(done)

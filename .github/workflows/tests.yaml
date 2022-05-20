@@ -1,0 +1,67 @@
+name: "Run tests"
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch: {}
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  unit-tests-iptables:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: "Set up Go"
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.18
+
+    - name: "Configure go modules cache"
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: "Run unit tests for iptables engine"
+      run: |
+        go test ./iptables/...
+
+  blackbox-tests-iptables:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: "Set up Go"
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.18
+
+    - name: "Configure go modules cache"
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: "Install dependencies"
+      run: |
+        go mod tidy
+        go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
+
+    - name: "Run blackbox tests"
+      run: |
+        sudo "PATH=$PATH" $(which ginkgo) run ./test/blackbox_tests/...

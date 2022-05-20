@@ -7,7 +7,6 @@ import (
 
 type Owner struct {
 	UID string
-	GID string
 }
 
 // TrafficFlow is a struct for Inbound/Outbound configuration
@@ -58,14 +57,21 @@ type Config struct {
 
 // ShouldDropInvalidPackets is just a convenience function which can be used in
 // iptables conditional command generations instead of inlining anonymous functions
-// i.e. AppendIf(ShouldDropInvalidPackets(), Match(...), Jump(Drop()))
+// i.e. AppendIf(ShouldDropInvalidPackets, Match(...), Jump(Drop()))
 func (c Config) ShouldDropInvalidPackets() bool {
 	return c.DropInvalidPackets
 }
 
+// ShouldRedirectDNS is just a convenience function which can be used in
+// iptables conditional command generations instead of inlining anonymous functions
+// i.e. AppendIf(ShouldRedirectDNS, Match(...), Jump(Drop()))
+func (c Config) ShouldRedirectDNS() bool {
+	return c.Redirect.DNS.Enabled
+}
+
 func defaultConfig() Config {
 	return Config{
-		Owner: Owner{UID: "5678", GID: "5678"},
+		Owner: Owner{UID: "5678"},
 		Redirect: Redirect{
 			NamePrefix: "",
 			Inbound: TrafficFlow{
@@ -95,10 +101,6 @@ func MergeConfigWithDefaults(cfg Config) Config {
 	// .Owner
 	if cfg.Owner.UID != "" {
 		result.Owner.UID = cfg.Owner.UID
-	}
-
-	if cfg.Owner.GID != "" {
-		result.Owner.GID = cfg.Owner.GID
 	}
 
 	// .Redirect

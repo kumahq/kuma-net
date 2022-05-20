@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/vishvananda/netlink"
@@ -18,10 +19,11 @@ import (
 // CLONE_NEWNET requires Linux Kernel 3.0+
 
 type NetNS struct {
-	name       string
-	ns         netns.NsHandle
-	originalNS netns.NsHandle
-	veth       *Veth
+	name            string
+	ns              netns.NsHandle
+	originalNS      netns.NsHandle
+	veth            *Veth
+	beforeExecFuncs []func() error
 }
 
 func (ns *NetNS) Name() string {
@@ -62,6 +64,24 @@ func (ns *NetNS) Unset() error {
 //  function have exclusive access to the current network namespace, and you should
 //  assume, that any new goroutine will be placed in the different namespace
 func (ns *NetNS) UnsafeExec(callback func()) <-chan error {
+	return ns.UnsafeExecInLoop(1, 0, callback)
+}
+
+// UnsafeExecInLoop will execute provided callback function inside the created
+// network namespace in a loop. It was named UnsafeExecInLoop instead of ExecInLoop
+// as you have to be very cautious and remember to not spawn new goroutines
+// inside provided callback (more info in warning below)
+//
+// WARNING!:
+//  Don't spawn new goroutines inside callback functions as the one inside UnsafeExecInLoop
+//  function have exclusive access to the current network namespace, and you should
+//  assume, that any new goroutine will be placed in the different namespace
+func (ns *NetNS) UnsafeExecInLoop(
+	numOfIterations uint,
+	delay time.Duration,
+	callback func(),
+	beforeCallbackFuncs ...func() error,
+) <-chan error {
 	done := make(chan error)
 
 	go func() {
@@ -69,14 +89,23 @@ func (ns *NetNS) UnsafeExec(callback func()) <-chan error {
 		defer close(done)
 
 		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
 
 		if err := ns.Set(); err != nil {
 			done <- fmt.Errorf("cannot set the namespace %q: %s", ns.name, err)
 		}
 		defer ns.Unset() //nolint:errcheck
 
-		callback()
+		for _, fn := range append(ns.beforeExecFuncs, beforeCallbackFuncs...) {
+			if err := fn(); err != nil {
+				done <- err
+			}
+		}
+
+		for i := 0; i < int(numOfIterations); i++ {
+			callback()
+
+			time.Sleep(delay)
+		}
 	}()
 
 	return done

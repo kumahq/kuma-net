@@ -5,12 +5,14 @@ import (
 	"net"
 )
 
-func DialAndGetReply(ip net.IP, port uint16) (string, error) {
-	address := &net.TCPAddr{
+func DialIPWithPortAndGetReply(ip net.IP, port uint16) (string, error) {
+	return DialTCPAddrAndGetReply(&net.TCPAddr{
 		IP:   ip,
 		Port: int(port),
-	}
+	})
+}
 
+func DialTCPAddrAndGetReply(address *net.TCPAddr) (string, error) {
 	conn, err := net.DialTCP("tcp", nil, address)
 	if err != nil {
 		return "", fmt.Errorf("cannot dial provided address: %s", err)

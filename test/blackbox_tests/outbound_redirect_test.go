@@ -9,6 +9,7 @@ import (
 
 	"github.com/kumahq/kuma-net/iptables/builder"
 	"github.com/kumahq/kuma-net/iptables/config"
+	"github.com/kumahq/kuma-net/test/blackbox_tests"
 	"github.com/kumahq/kuma-net/test/framework/ip"
 	"github.com/kumahq/kuma-net/test/framework/netns"
 	"github.com/kumahq/kuma-net/test/framework/socket"
@@ -59,7 +60,7 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port", func() {
 			Eventually(ns.UnsafeExec(func() {
 				address := ip.GenRandomIPv4()
 
-				Expect(tcp.DialAndGetReply(address, randomPort)).
+				Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
 					To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
 			})).Should(BeClosed())
 
@@ -70,7 +71,7 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port", func() {
 			var entries []TableEntry
 			var lockedPorts []uint16
 
-			for i := 0; i < 50; i++ {
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
 				// This gives us more entropy as all generated ports will be
 				// different from each other
@@ -134,7 +135,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 			Eventually(ns.UnsafeExec(func() {
 				address := ip.GenRandomIPv6()
 
-				Expect(tcp.DialAndGetReply(address, randomPort)).
+				Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
 					To(Equal(fmt.Sprintf("[%s]:%d", address, randomPort)))
 			})).Should(BeClosed())
 
@@ -145,7 +146,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 			var entries []TableEntry
 			var lockedPorts []uint16
 
-			for i := 0; i < 50; i++ {
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
 				// This gives us more entropy as all generated ports will be
 				// different from each other

@@ -74,13 +74,12 @@ func DialAddrAndIncreaseResultMap(address string, resultMap *ResultMap) error {
 	}
 	defer socket.Close()
 
-	n, err := socket.Write(nil)
-	if err != nil {
+	if _, err := socket.Write(nil); err != nil {
 		return fmt.Errorf("cannot send hello message: %s", err)
 	}
 
 	buf := make([]byte, 1024)
-	n, err = socket.Read(buf)
+	n, err := socket.Read(buf)
 	if err != nil {
 		return fmt.Errorf("cannot read replied message: %s", err)
 	}

@@ -20,13 +20,12 @@ func DialWithHelloMsgAndGetReply(
 	}
 	defer socket.Close()
 
-	n, err := socket.Write([]byte(helloMsg.String()))
-	if err != nil {
+	if _, err = socket.Write([]byte(helloMsg.String())); err != nil {
 		return "", fmt.Errorf("cannot send hello message %q: %s", helloMsg, err)
 	}
 
 	buf := make([]byte, 1024)
-	n, err = socket.Read(buf)
+	n, err := socket.Read(buf)
 	if err != nil {
 		return "", fmt.Errorf("cannot read replied message: %s", err)
 	}

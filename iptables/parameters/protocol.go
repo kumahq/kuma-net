@@ -8,7 +8,6 @@ import (
 type ProtocolParameter struct {
 	name       string
 	parameters []ParameterBuilder
-	negative   bool
 }
 
 func (p *ProtocolParameter) Build(verbose bool) string {

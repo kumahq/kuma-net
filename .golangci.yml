@@ -1,0 +1,33 @@
+linters:
+  enable:
+    - bodyclose
+    - contextcheck
+    - gci
+    - gocritic
+    - gofmt
+    - gomodguard
+    - importas
+    - misspell
+    - unconvert
+    - unparam
+    - whitespace
+
+run:
+  modules-download-mode: readonly
+
+linters-settings:
+  gocritic:
+    disabled-checks:
+      - singleCaseSwitch
+
+  gci:
+    local-prefixes: github.com/kumahq/kuma-net
+
+  misspell:
+    locale: US
+
+  gofmt:
+    simplify: true
+
+issues:
+  fix: true

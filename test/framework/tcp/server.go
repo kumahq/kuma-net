@@ -82,7 +82,7 @@ func UnsafeStartTCPServer(
 		if err := ns.Set(); err != nil {
 			errorC <- fmt.Errorf("cannot start TCP server: %s", err)
 		}
-		defer ns.Unset()
+		defer ns.Unset() //nolint:errcheck
 
 		l, err := net.Listen("tcp", address)
 		if err != nil {

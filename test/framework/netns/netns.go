@@ -93,7 +93,7 @@ func (ns *NetNS) UnsafeExecInLoop(
 		if err := ns.Set(); err != nil {
 			done <- fmt.Errorf("cannot set the namespace %q: %s", ns.name, err)
 		}
-		defer ns.Unset()
+		defer ns.Unset() //nolint:errcheck
 
 		for _, fn := range append(ns.beforeExecFuncs, beforeCallbackFuncs...) {
 			if err := fn(); err != nil {

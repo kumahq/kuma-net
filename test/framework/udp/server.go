@@ -40,7 +40,7 @@ func UnsafeStartUDPServer(
 			errorC <- fmt.Errorf("cannot switch to the namespace: %s", err)
 			return
 		}
-		defer ns.Unset()
+		defer ns.Unset() //nolint:errcheck
 
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {

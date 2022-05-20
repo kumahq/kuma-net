@@ -34,7 +34,15 @@ jobs:
 
     - name: "Run unit tests for iptables engine"
       run: |
-        go test ./iptables/...
+        ginkgo run ./iptables/... \
+          --output-dir test-results \
+          --junit-report unit-tests-results.xml
+
+    - name: "Publish Test Results"
+      uses: EnricoMi/publish-unit-test-result-action@v1
+      if: always()
+      with:
+        files: "test-results/**/*.xml"
 
   blackbox-tests-iptables:
     runs-on: ubuntu-latest
@@ -64,4 +72,12 @@ jobs:
 
     - name: "Run blackbox tests"
       run: |
-        sudo "PATH=$PATH" $(which ginkgo) run ./test/blackbox_tests/...
+        sudo "PATH=$PATH" $(which ginkgo) run ./test/blackbox_tests/... \
+          --output-dir test-results \
+          --junit-report blackbox-tests-results.xml
+
+    - name: "Publish Test Results"
+      uses: EnricoMi/publish-unit-test-result-action@v1
+      if: always()
+      with:
+        files: "test-results/**/*.xml"

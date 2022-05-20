@@ -24,15 +24,28 @@ commands:
         default: *go_version
     steps:
     - run:
+        name: "Install basic tools"
+        command: |
+          if [ -r /etc/os-release ]; then source /etc/os-release; fi
+          case "$ID" in
+          ubuntu)
+            if ! command -v sudo 2>&1 >/dev/null; then
+              apt update
+              apt install -y sudo
+            fi
+            ;;
+          esac
+
     - run:
         name: "Install Go"
         # See https://golang.org/doc/install#tarball
         command: |
           curl -s --fail --location https://dl.google.com/go/go<<parameters.go_version>>.<<parameters.go_os>>-<<parameters.go_arch>>.tar.gz | tar -xz -C $HOME
-          echo 'export PATH=$HOME/go/bin:$PATH' >> $BASH_ENV
           # if GOPATH is not set, `golang-ci` fails with an obscure message
-          # "ERRO Running error: context loading failed: failed to load program with go/packages: could not determine GOARCH and Go compiler"
-          echo 'export GOPATH=$HOME/.go-kuma-go' >> $BASH_ENV
+          # "ERRO Running error: context loading failed: failed to load program
+          # with go/packages: could not determine GOARCH and Go compiler"
+          echo 'export GOPATH=$HOME/.go-kuma-net-go' >> $BASH_ENV
+          echo 'export PATH=$HOME/.go-kuma-net-go/bin:$PATH' >> $BASH_ENV
 
 executors:
   vm-amd64:
@@ -85,7 +98,7 @@ jobs:
         key: << parameters.executor >>-go.mod-{{ .Branch }}-{{ checksum "go.sum" }}
         paths:
         - "/go/pkg/mod"
-        - "/root/.go-kuma-go"
+        - "/root/.go-kuma-net-go"
 
   unit-tests-iptables:
     parameters:
@@ -133,10 +146,13 @@ jobs:
         type: string
         default: amd64
 
-    executor:
-      name: vm-<< parameters.arch >>
+    machine:
+      # The image uses the current tag, which always points to the most recent
+      # supported release. If stability and determinism are crucial for your CI
+      # pipeline, use a release date tag with your image, e.g. ubuntu-2004:202201-02
+      image: ubuntu-2004:current
 
-    parallelism: << parameters.parallelism >>
+#    parallelism: << parameters.parallelism >>
 
     steps:
     - run:
@@ -158,9 +174,16 @@ jobs:
         - vm-<< parameters.arch >>-go.mod-{{ .Branch }}-{{ checksum "go.sum" }}
 
     - run:
-        name: "Run blackbox tests"
+        name: "Download go mods"
         command: |
           go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
+          
+          ls -lah $HOME/.go-kuma-net-go/bin
+
+    - run:
+        name: "Run blackbox tests"
+        command: |
+          env
           sudo "PATH=$PATH" $(which ginkgo) run ./test/blackbox_tests/...
 
     - store_test_results:

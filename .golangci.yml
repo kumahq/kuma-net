@@ -20,6 +20,9 @@ linters-settings:
     disabled-checks:
       - singleCaseSwitch
 
+  gci:
+    local-prefixes: github.com/kumahq/kuma-net
+
   misspell:
     locale: US
 

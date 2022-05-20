@@ -41,7 +41,7 @@ func UnsafeStartUDPServer(
 		if err := ns.Set(); err != nil {
 			errorC <- fmt.Errorf("cannot switch to the namespace: %s", err)
 		}
-		defer ns.Unset()
+		defer ns.Unset() //nolint:errcheck
 
 		for _, callback := range callbacks {
 			if err := callback(); err != nil {

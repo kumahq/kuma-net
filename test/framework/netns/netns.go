@@ -74,7 +74,7 @@ func (ns *NetNS) UnsafeExec(callback func()) <-chan error {
 		if err := ns.Set(); err != nil {
 			done <- fmt.Errorf("cannot set the namespace %q: %s", ns.name, err)
 		}
-		defer ns.Unset()
+		defer ns.Unset() //nolint:errcheck
 
 		callback()
 	}()

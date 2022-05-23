@@ -262,7 +262,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports except excluded ones",
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Inbound: config.TrafficFlow{
-						Port:         serverPort,
+						PortIPv6:     serverPort,
 						ExcludePorts: []uint16{excludedPort},
 					},
 				},

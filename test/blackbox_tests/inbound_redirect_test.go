@@ -107,7 +107,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports", func() {
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Inbound: config.TrafficFlow{
-						Port: serverPort,
+						PortIPv6: serverPort,
 					},
 				},
 				IPv6:          true,

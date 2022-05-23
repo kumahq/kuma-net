@@ -120,7 +120,7 @@ func buildMeshRedirect(cfg config.TrafficFlow, prefix string, ipv6 bool) *Chain 
 	chainName := cfg.RedirectChain.GetFullName(prefix)
 
 	redirectPort := cfg.Port
-	if ipv6 {
+	if ipv6 && cfg.PortIPv6 != 0 {
 		redirectPort = cfg.PortIPv6
 	}
 

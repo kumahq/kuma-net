@@ -86,7 +86,7 @@ func defaultConfig() Config {
 				RedirectChain: Chain{Name: "MESH_OUTBOUND_REDIRECT"},
 				ExcludePorts:  []uint16{},
 			},
-			DNS: DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: false},
+			DNS: DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: true},
 		},
 		DropInvalidPackets: false,
 		IPv6:               false,

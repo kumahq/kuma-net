@@ -116,7 +116,14 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 	return meshOutbound
 }
 
-func buildMeshRedirect(chainName string, redirectPort uint16) *Chain {
+func buildMeshRedirect(cfg config.TrafficFlow, prefix string, ipv6 bool) *Chain {
+	chainName := cfg.RedirectChain.GetFullName(prefix)
+
+	redirectPort := cfg.Port
+	if ipv6 && cfg.PortIPv6 != 0 {
+		redirectPort = cfg.PortIPv6
+	}
+
 	return NewChain(chainName).
 		Append(
 			Protocol(Tcp()),
@@ -129,9 +136,6 @@ func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTabl
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
-	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName(prefix)
-	inboundRedirectPort := cfg.Redirect.Inbound.Port
-	outboundRedirectPort := cfg.Redirect.Outbound.Port
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
 
@@ -161,13 +165,13 @@ func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTabl
 	meshInbound := buildMeshInbound(cfg.Redirect.Inbound, prefix, inboundRedirectChainName)
 
 	// MESH_INBOUND_REDIRECT
-	meshInboundRedirect := buildMeshRedirect(inboundRedirectChainName, inboundRedirectPort)
+	meshInboundRedirect := buildMeshRedirect(cfg.Redirect.Inbound, prefix, ipv6)
 
 	// MESH_OUTBOUND
 	meshOutbound := buildMeshOutbound(cfg, loopback, ipv6)
 
 	// MESH_OUTBOUND_REDIRECT
-	meshOutboundRedirect := buildMeshRedirect(outboundRedirectChainName, outboundRedirectPort)
+	meshOutboundRedirect := buildMeshRedirect(cfg.Redirect.Outbound, prefix, ipv6)
 
 	return nat.
 		WithChain(meshInbound).

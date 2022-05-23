@@ -12,6 +12,7 @@ type Owner struct {
 // TrafficFlow is a struct for Inbound/Outbound configuration
 type TrafficFlow struct {
 	Port          uint16
+	PortIPv6      uint16
 	Chain         Chain
 	RedirectChain Chain
 	ExcludePorts  []uint16
@@ -76,6 +77,7 @@ func defaultConfig() Config {
 			NamePrefix: "",
 			Inbound: TrafficFlow{
 				Port:          15006,
+				PortIPv6:      15010,
 				Chain:         Chain{Name: "MESH_INBOUND"},
 				RedirectChain: Chain{Name: "MESH_INBOUND_REDIRECT"},
 				ExcludePorts:  []uint16{},
@@ -111,6 +113,10 @@ func MergeConfigWithDefaults(cfg Config) Config {
 	// .Redirect.Inbound
 	if cfg.Redirect.Inbound.Port != 0 {
 		result.Redirect.Inbound.Port = cfg.Redirect.Inbound.Port
+	}
+
+	if cfg.Redirect.Inbound.PortIPv6 != 0 {
+		result.Redirect.Inbound.PortIPv6 = cfg.Redirect.Inbound.PortIPv6
 	}
 
 	if cfg.Redirect.Inbound.Chain.Name != "" {

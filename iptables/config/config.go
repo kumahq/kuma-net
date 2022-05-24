@@ -84,12 +84,11 @@ func (c Config) ShouldConntrackZoneSplit() bool {
 	// There are situations where conntrack extension is not present (WSL2)
 	// instead of failing the whole iptables application, we can log the warning,
 	// skip conntrack related rules and move forward
-	if output, err := exec.Command("iptables", "-m", "conntrack", "--help").
-		CombinedOutput(); err != nil {
+	if err := exec.Command("iptables", "-m", "conntrack", "--help").Run(); err != nil {
 		_, _ = fmt.Fprintf(c.RuntimeOutput,
 			"[WARNING] error occured when validating if 'conntrack' iptables "+
-				"module is present: \n%s: %s\nRules for DNS conntrack zone "+
-				"splitting won't be applied", output, err,
+				"module is present. Rules for DNS conntrack zone "+
+				"splitting won't be applied: %s\n", err,
 		)
 
 		return false

@@ -10,7 +10,7 @@ import (
 func buildRawTable(cfg config.Config) *table.RawTable {
 	raw := table.Raw()
 
-	if cfg.Redirect.DNS.Enabled && cfg.Redirect.DNS.ConntrackZoneSplit {
+	if cfg.ShouldConntrackZoneSplit() {
 		raw.Output().
 			Append(
 				Protocol(Udp(DestinationPort(DNSPort))),

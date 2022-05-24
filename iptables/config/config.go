@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 )
 
 type Owner struct {
@@ -68,6 +70,32 @@ func (c Config) ShouldDropInvalidPackets() bool {
 // i.e. AppendIf(ShouldRedirectDNS, Match(...), Jump(Drop()))
 func (c Config) ShouldRedirectDNS() bool {
 	return c.Redirect.DNS.Enabled
+}
+
+// ShouldConntrackZoneSplit is a function which will check if DNS redirection and
+// conntrack zone splitting settings are enabled (return false if not), and then
+// will verify if there is conntrack iptables extension available to apply
+// the DNS conntrack zone splitting iptables rules
+func (c Config) ShouldConntrackZoneSplit() bool {
+	if !c.Redirect.DNS.Enabled || !c.Redirect.DNS.ConntrackZoneSplit {
+		return false
+	}
+
+	// There are situations where conntrack extension is not present (WSL2)
+	// instead of failing the whole iptables application, we can log the warning,
+	// skip conntrack related rules and move forward
+	if output, err := exec.Command("iptables", "-m", "conntrack", "--help").
+		CombinedOutput(); err != nil {
+		_, _ = fmt.Fprintf(c.RuntimeOutput,
+			"[WARNING] error occured when validating if 'conntrack' iptables "+
+				"module is present: \n%s: %s\nRules for DNS conntrack zone "+
+				"splitting won't be applied", output, err,
+		)
+
+		return false
+	}
+
+	return true
 }
 
 func defaultConfig() Config {

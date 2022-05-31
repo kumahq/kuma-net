@@ -1,13 +1,3 @@
-* raw
-
-# Rules:
---append PREROUTING --protocol udp --source-port 53 --jump CT --zone 1
---append OUTPUT --protocol udp --destination-port 53 --match owner --uid-owner 5678 --jump CT --zone 1
---append OUTPUT --protocol udp --source-port 15053 --match owner --uid-owner 5678 --jump CT --zone 2
---append OUTPUT --protocol udp --destination-port 53 --jump CT --zone 2
-
-COMMIT
-
 * nat
 
 # Custom Chains:

@@ -18,8 +18,4 @@
   <rule ipv="ipv4" table="nat" chain="KUMA_MESH_OUTBOUND" priority="3">-j KUMA_MESH_OUTBOUND_REDIRECT</rule>
   <rule ipv="ipv4" table="nat" chain="KUMA_MESH_INBOUND_REDIRECT" priority="3">-p tcp -j REDIRECT --to-ports 15006</rule>
   <rule ipv="ipv4" table="nat" chain="KUMA_MESH_OUTBOUND_REDIRECT" priority="3">-p tcp -j REDIRECT --to-ports 15001</rule>
-  <rule ipv="ipv4" table="raw" chain="PREROUTING" priority="3">-p udp --sport 53 -j CT --zone 1</rule>
-  <rule ipv="ipv4" table="raw" chain="OUTPUT" priority="3">-p udp --dport 53 -m owner --uid-owner 5678 -j CT --zone 1</rule>
-  <rule ipv="ipv4" table="raw" chain="OUTPUT" priority="3">-p udp --sport 15053 -m owner --uid-owner 5678 -j CT --zone 2</rule>
-  <rule ipv="ipv4" table="raw" chain="OUTPUT" priority="3">-p udp --dport 53 -j CT --zone 2</rule>
 </direct>

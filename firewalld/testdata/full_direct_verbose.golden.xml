@@ -4,10 +4,6 @@
   <chain ipv="ipv4" table="nat" chain="KUMA_MESH_OUTBOUND"></chain>
   <chain ipv="ipv4" table="nat" chain="KUMA_MESH_INBOUND_REDIRECT"></chain>
   <chain ipv="ipv4" table="nat" chain="KUMA_MESH_OUTBOUND_REDIRECT"></chain>
-  <rule ipv="ipv4" table="raw" chain="PREROUTING" priority="3">--protocol udp --source-port 53 --jump CT --zone 1</rule>
-  <rule ipv="ipv4" table="raw" chain="OUTPUT" priority="3">--protocol udp --destination-port 53 --match owner --uid-owner 5678 --jump CT --zone 1</rule>
-  <rule ipv="ipv4" table="raw" chain="OUTPUT" priority="3">--protocol udp --source-port 15053 --match owner --uid-owner 5678 --jump CT --zone 2</rule>
-  <rule ipv="ipv4" table="raw" chain="OUTPUT" priority="3">--protocol udp --destination-port 53 --jump CT --zone 2</rule>
   <rule ipv="ipv4" table="nat" chain="PREROUTING" priority="3">--protocol tcp --jump KUMA_MESH_INBOUND</rule>
   <rule ipv="ipv4" table="nat" chain="OUTPUT" priority="3">--protocol udp --destination-port 53 --match owner --uid-owner 5678 --jump RETURN</rule>
   <rule ipv="ipv4" table="nat" chain="OUTPUT" priority="3">--protocol udp --destination-port 53 --jump REDIRECT --to-ports 15053</rule>

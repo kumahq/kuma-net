@@ -1,0 +1,23 @@
+* raw
+-A PREROUTING -p udp --sport 53 -j CT --zone 1
+-A OUTPUT -p udp --dport 53 -m owner --uid-owner 5678 -j CT --zone 1
+-A OUTPUT -p udp --sport 15053 -m owner --uid-owner 5678 -j CT --zone 2
+-A OUTPUT -p udp --sport 15053 -m owner --uid-owner 5678 -j CT --zone 2
+-A OUTPUT -p udp --sport 15053 -m owner --uid-owner 5678 -j CT --zone 2
+-A OUTPUT -p udp --dport 53 -j CT --zone 2
+COMMIT
+* nat
+-N KUMA_INBOUND
+-N KUMA_OUTPUT
+-A KUMA_INBOUND -p tcp --dport 15008 -j RETURN
+-A PREROUTING -p tcp -j KUMA_INBOUND
+-A KUMA_INBOUND -p tcp --dport 22 -j RETURN
+-A KUMA_INBOUND -p tcp --dport 22 -j RETURN
+-A KUMA_INBOUND -p tcp --dport 22 -j RETURN
+-A OUTPUT -p tcp -j KUMA_OUTPUT
+-A KUMA_OUTPUT -d 127.0.0.1/32 -j RETURN
+-A OUTPUT -p tcp -j KUMA_OUTPUT
+-A KUMA_OUTPUT -d 127.0.0.1/32 -j RETURN
+-N KUMA_OUTPUT
+-N KUMA_INBOUND
+COMMIT

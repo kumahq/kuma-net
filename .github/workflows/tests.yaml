@@ -11,7 +11,7 @@ env:
   CGO_ENABLED: "0"
 
 jobs:
-  unit-tests-iptables:
+  unit-tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,9 +34,13 @@ jobs:
 
     - name: "Run unit tests for iptables engine"
       run: |
-        go test ./iptables/...
+        ginkgo run ./iptables/...
 
-  blackbox-tests-iptables:
+    - name: "Run unit tests for firewalld"
+      run: |
+        ginkgo run ./firewalld/...
+
+  blackbox-tests:
     runs-on: ubuntu-latest
 
     steps:

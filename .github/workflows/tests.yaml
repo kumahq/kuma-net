@@ -32,6 +32,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
+    - name: "Install dependencies"
+      run: |
+        go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
+
     - name: "Run unit tests for iptables engine"
       run: |
         ginkgo run ./iptables/...

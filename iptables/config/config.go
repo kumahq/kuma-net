@@ -18,6 +18,7 @@ type TrafficFlow struct {
 	Chain         Chain
 	RedirectChain Chain
 	ExcludePorts  []uint16
+	IncludePorts  []uint16
 }
 
 type DNS struct {
@@ -108,12 +109,14 @@ func defaultConfig() Config {
 				Chain:         Chain{Name: "MESH_INBOUND"},
 				RedirectChain: Chain{Name: "MESH_INBOUND_REDIRECT"},
 				ExcludePorts:  []uint16{},
+				IncludePorts:  []uint16{},
 			},
 			Outbound: TrafficFlow{
 				Port:          15001,
 				Chain:         Chain{Name: "MESH_OUTBOUND"},
 				RedirectChain: Chain{Name: "MESH_OUTBOUND_REDIRECT"},
 				ExcludePorts:  []uint16{},
+				IncludePorts:  []uint16{},
 			},
 			DNS: DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: true},
 		},
@@ -158,6 +161,10 @@ func MergeConfigWithDefaults(cfg Config) Config {
 		result.Redirect.Inbound.ExcludePorts = cfg.Redirect.Inbound.ExcludePorts
 	}
 
+	if len(cfg.Redirect.Inbound.IncludePorts) > 0 {
+		result.Redirect.Inbound.IncludePorts = cfg.Redirect.Inbound.IncludePorts
+	}
+
 	// .Redirect.Outbound
 	if cfg.Redirect.Outbound.Port != 0 {
 		result.Redirect.Outbound.Port = cfg.Redirect.Outbound.Port
@@ -173,6 +180,10 @@ func MergeConfigWithDefaults(cfg Config) Config {
 
 	if len(cfg.Redirect.Outbound.ExcludePorts) > 0 {
 		result.Redirect.Outbound.ExcludePorts = cfg.Redirect.Outbound.ExcludePorts
+	}
+
+	if len(cfg.Redirect.Outbound.IncludePorts) > 0 {
+		result.Redirect.Outbound.IncludePorts = cfg.Redirect.Outbound.IncludePorts
 	}
 
 	// .Redirect.DNS

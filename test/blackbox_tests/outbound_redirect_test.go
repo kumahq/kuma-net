@@ -3,6 +3,7 @@ package blackbox_tests_test
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -156,6 +157,376 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 					EntryDescription(desc),
 					randomPorts[0],
 					randomPorts[1],
+				)
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded ones", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to outbound port",
+		func(serverPort, randomPort, excludedPort uint16) {
+			// given
+
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Port:         serverPort,
+						ExcludePorts: []uint16{excludedPort},
+					},
+				},
+				RuntimeOutput: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", serverPort),
+				tcp.ReplyWithOriginalDstIPv4,
+				tcp.CloseConn,
+			)
+			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
+
+			excludedReadyC, excludedErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", excludedPort),
+				tcp.ReplyWith("excluded"),
+				tcp.CloseConn,
+			)
+			Eventually(excludedReadyC).Should(BeClosed())
+			Consistently(excludedErrC).ShouldNot(Receive())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				address := ip.GenRandomIPv4()
+
+				Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
+					To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				Expect(tcp.DialIPWithPortAndGetReply(net.IPv4zero, excludedPort)).
+					To(Equal("excluded"))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
+			Eventually(excludedErrC).Should(BeClosed())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			var lockedPorts []uint16
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d (excluded: %%d)")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+					randomPorts[2],
+				)
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded ones", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().WithIPv6(true).Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to outbound port",
+		func(serverPort, randomPort, excludedPort uint16) {
+			// given
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Port:         serverPort,
+						ExcludePorts: []uint16{excludedPort},
+					},
+				},
+				IPv6:          true,
+				RuntimeOutput: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", serverPort),
+				tcp.ReplyWithOriginalDstIPv6,
+				tcp.CloseConn,
+			)
+			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
+
+			excludedReadyC, excludedErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", excludedPort),
+				tcp.ReplyWith("excluded"),
+				tcp.CloseConn,
+			)
+			Eventually(excludedReadyC).Should(BeClosed())
+			Consistently(excludedErrC).ShouldNot(Receive())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				address := ip.GenRandomIPv6()
+
+				Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
+					To(Equal(fmt.Sprintf("[%s]:%d", address, randomPort)))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				Expect(tcp.DialIPWithPortAndGetReply(net.IPv6zero, excludedPort)).
+					To(Equal("excluded"))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
+			Eventually(excludedErrC).Should(BeClosed())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			var lockedPorts []uint16
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d (excluded: %%d)")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+					randomPorts[2],
+				)
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv4 TCP traffic only to included port", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to outbound port",
+		func(serverPort, includedPort, randomPort uint16) {
+			// given
+
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Port:         serverPort,
+						IncludePorts: []uint16{includedPort},
+						ExcludePorts: []uint16{includedPort},
+					},
+				},
+				RuntimeOutput: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", serverPort),
+				tcp.ReplyWithOriginalDstIPv4,
+				tcp.CloseConn,
+			)
+			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
+
+			randomReadyC, randomErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", randomPort),
+				tcp.ReplyWith("random"),
+				tcp.CloseConn,
+			)
+			Eventually(randomReadyC).Should(BeClosed())
+			Consistently(randomErrC).ShouldNot(Receive())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				address := ip.GenRandomIPv4()
+
+				Expect(tcp.DialIPWithPortAndGetReply(address, includedPort)).
+					To(Equal(fmt.Sprintf("%s:%d", address, includedPort)))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				Expect(tcp.DialIPWithPortAndGetReply(net.IPv4zero, randomPort)).
+					To(Equal("random"))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
+			Eventually(randomErrC).Should(BeClosed())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			var lockedPorts []uint16
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d (random: %%d)")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+					randomPorts[2],
+				)
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv6 TCP traffic only to included port", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().WithIPv6(true).Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to outbound port",
+		func(serverPort, includedPort, randomPort uint16) {
+			// given
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Port:         serverPort,
+						IncludePorts: []uint16{includedPort},
+						ExcludePorts: []uint16{includedPort},
+					},
+				},
+				IPv6:          true,
+				RuntimeOutput: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", serverPort),
+				tcp.ReplyWithOriginalDstIPv6,
+				tcp.CloseConn,
+			)
+			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
+
+			randomReadyC, randomErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", randomPort),
+				tcp.ReplyWith("random"),
+				tcp.CloseConn,
+			)
+			Eventually(randomReadyC).Should(BeClosed())
+			Consistently(randomErrC).ShouldNot(Receive())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				address := ip.GenRandomIPv6()
+
+				Expect(tcp.DialIPWithPortAndGetReply(address, includedPort)).
+					To(Equal(fmt.Sprintf("[%s]:%d", address, includedPort)))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				Expect(tcp.DialIPWithPortAndGetReply(net.IPv6zero, randomPort)).
+					To(Equal("random"))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
+			Eventually(randomErrC).Should(BeClosed())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			var lockedPorts []uint16
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d (random: %%d)")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+					randomPorts[2],
 				)
 				entries = append(entries, entry)
 			}

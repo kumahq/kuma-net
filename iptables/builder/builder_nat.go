@@ -27,7 +27,12 @@ func buildMeshInbound(cfg config.TrafficFlow, prefix string, meshInboundRedirect
 	return meshInbound
 }
 
-func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
+func buildMeshOutbound(
+	cfg config.Config,
+	dnsServers []string,
+	loopback string,
+	ipv6 bool,
+) *Chain {
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
@@ -100,11 +105,24 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 		Append(
 			Match(Owner(Uid(uid))),
 			Jump(Return()),
-		).
-		AppendIf(cfg.ShouldRedirectDNS,
-			Protocol(Tcp(DestinationPort(DNSPort))),
-			Jump(ToPort(dnsRedirectPort)),
-		).
+		)
+	if cfg.ShouldRedirectDNS() {
+		if cfg.ShouldCaptureAllDNS() {
+			meshOutbound.Append(
+				Protocol(Tcp(DestinationPort(DNSPort))),
+				Jump(ToPort(dnsRedirectPort)),
+			)
+		} else {
+			for _, dnsIp := range dnsServers {
+				meshOutbound.Append(
+					Destination(dnsIp),
+					Protocol(Tcp(DestinationPort(DNSPort))),
+					Jump(ToPort(dnsRedirectPort)),
+				)
+			}
+		}
+	}
+	meshOutbound.
 		Append(
 			Destination(localhost),
 			Jump(Return()),
@@ -131,14 +149,48 @@ func buildMeshRedirect(cfg config.TrafficFlow, prefix string, ipv6 bool) *Chain 
 		)
 }
 
-func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTable {
-	prefix := cfg.Redirect.NamePrefix
-	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
-	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
-	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
+func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable) {
+	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(cfg.Redirect.NamePrefix)
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
 
+	if cfg.ShouldRedirectDNS() {
+		nat.Output().Append(
+			Protocol(Udp(DestinationPort(DNSPort))),
+			Match(Owner(Uid(uid))),
+			Jump(Return()),
+		)
+		if cfg.ShouldCaptureAllDNS() {
+			nat.Output().Append(
+				Protocol(Udp(DestinationPort(DNSPort))),
+				Jump(ToPort(dnsRedirectPort)),
+			)
+		} else {
+			for _, dnsIp := range dnsServers {
+				nat.Output().Append(
+					Destination(dnsIp),
+					Protocol(Udp(DestinationPort(DNSPort))),
+					Jump(ToPort(dnsRedirectPort)),
+				)
+			}
+		}
+	}
+	nat.Output().
+		Append(
+			Protocol(Tcp()),
+			Jump(ToUserDefinedChain(outboundChainName)),
+		)
+}
+
+func buildNatTable(
+	cfg config.Config,
+	dnsServers []string,
+	loopback string,
+	ipv6 bool,
+) *table.NatTable {
+	prefix := cfg.Redirect.NamePrefix
+	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
+	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
 	nat := table.Nat()
 
 	nat.Prerouting().Append(
@@ -146,20 +198,7 @@ func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTabl
 		Jump(ToUserDefinedChain(inboundChainName)),
 	)
 
-	nat.Output().
-		AppendIf(cfg.ShouldRedirectDNS,
-			Protocol(Udp(DestinationPort(DNSPort))),
-			Match(Owner(Uid(uid))),
-			Jump(Return()),
-		).
-		AppendIf(cfg.ShouldRedirectDNS,
-			Protocol(Udp(DestinationPort(DNSPort))),
-			Jump(ToPort(dnsRedirectPort)),
-		).
-		Append(
-			Protocol(Tcp()),
-			Jump(ToUserDefinedChain(outboundChainName)),
-		)
+	addOutputRules(cfg, dnsServers, nat)
 
 	// MESH_INBOUND
 	meshInbound := buildMeshInbound(cfg.Redirect.Inbound, prefix, inboundRedirectChainName)
@@ -168,7 +207,7 @@ func buildNatTable(cfg config.Config, loopback string, ipv6 bool) *table.NatTabl
 	meshInboundRedirect := buildMeshRedirect(cfg.Redirect.Inbound, prefix, ipv6)
 
 	// MESH_OUTBOUND
-	meshOutbound := buildMeshOutbound(cfg, loopback, ipv6)
+	meshOutbound := buildMeshOutbound(cfg, dnsServers, loopback, ipv6)
 
 	// MESH_OUTBOUND_REDIRECT
 	meshOutboundRedirect := buildMeshRedirect(cfg.Redirect.Outbound, prefix, ipv6)

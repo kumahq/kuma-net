@@ -3,6 +3,8 @@ package blackbox_tests_test
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -41,8 +43,9 @@ var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53", func() {
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					DNS: config.DNS{
-						Enabled: true,
-						Port:    randomPort,
+						Enabled:    true,
+						Port:       randomPort,
+						CaptureAll: true,
 					},
 				},
 				RuntimeOutput: ioutil.Discard,
@@ -106,8 +109,9 @@ var _ = Describe("Outbound IPv4 DNS/TCP traffic to port 53", func() {
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					DNS: config.DNS{
-						Enabled: true,
-						Port:    dnsPort,
+						Enabled:    true,
+						Port:       dnsPort,
+						CaptureAll: true,
 					},
 					Outbound: config.TrafficFlow{
 						Port: outboundPort,
@@ -188,8 +192,9 @@ var _ = Describe("Outbound IPv6 DNS/UDP traffic to port 53", func() {
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					DNS: config.DNS{
-						Enabled: true,
-						Port:    randomPort,
+						Enabled:    true,
+						Port:       randomPort,
+						CaptureAll: true,
 					},
 				},
 				IPv6:          true,
@@ -254,8 +259,9 @@ var _ = Describe("Outbound IPv6 DNS/TCP traffic to port 53", func() {
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					DNS: config.DNS{
-						Enabled: true,
-						Port:    dnsPort,
+						Enabled:    true,
+						Port:       dnsPort,
+						CaptureAll: true,
 					},
 					Outbound: config.TrafficFlow{
 						Port: outboundPort,
@@ -344,6 +350,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting", func() {
 						Enabled:            true,
 						Port:               port,
 						ConntrackZoneSplit: true,
+						CaptureAll:         true,
 					},
 				},
 				Owner:         config.Owner{UID: strconv.Itoa(int(uid))},
@@ -452,6 +459,7 @@ var _ = Describe("Outbound IPv6 DNS/UDP conntrack zone splitting", func() {
 						Enabled:            true,
 						Port:               port,
 						ConntrackZoneSplit: true,
+						CaptureAll:         true,
 					},
 				},
 				IPv6:          true,
@@ -532,3 +540,298 @@ var _ = Describe("Outbound IPv6 DNS/UDP conntrack zone splitting", func() {
 		}(),
 	)
 })
+
+var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53 only for addresses in configuration ", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to provided port",
+		func(randomPort uint16) {
+			// given
+			dnsServers := getDnsServers("testdata/resolv4.conf", 2, false)
+			randomAddressDnsRequest := udp.GenRandomAddressIPv4(consts.DNSPort)
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					DNS: config.DNS{
+						Enabled:          true,
+						CaptureAll:       false,
+						Port:             randomPort,
+						ResolvConfigPath: "testdata/resolv4.conf",
+					},
+				},
+				RuntimeOutput: ioutil.Discard,
+			}
+			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv4, randomPort)
+
+			readyC, errC := udp.UnsafeStartUDPServer(ns, serverAddress, udp.ReplyWithReceivedMsg)
+			Consistently(errC).ShouldNot(Receive())
+			Eventually(readyC).Should(BeClosed())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// and
+			for _, dnsServer := range dnsServers {
+				Eventually(ns.UnsafeExec(func() {
+					Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(dnsServer, dnsServer)).
+						To(Equal(dnsServer.String()))
+				})).Should(BeClosed())
+			}
+
+			// and do not redirect any dns request
+			Eventually(ns.UnsafeExec(func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(randomAddressDnsRequest, randomAddressDnsRequest))
+			})).ShouldNot(BeClosed())
+
+			// then
+			Consistently(errC).ShouldNot(Receive())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			lockedPorts := []uint16{consts.DNSPort}
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(1, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
+				entry := Entry(EntryDescription(desc), randomPorts[0])
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv6 DNS/UDP traffic to port 53 only for addresses in configuration ", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().WithIPv6(true).Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to provided port",
+		func(randomPort uint16) {
+			// given
+			dnsServers := getDnsServers("testdata/resolv6.conf", 2, true)
+			randomAddressDnsRequest := udp.GenRandomAddressIPv6(consts.DNSPort)
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					DNS: config.DNS{
+						Enabled:          true,
+						CaptureAll:       false,
+						Port:             randomPort,
+						ResolvConfigPath: "testdata/resolv6.conf",
+					},
+				},
+				RuntimeOutput: ioutil.Discard,
+				IPv6:          true,
+			}
+			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv6, randomPort)
+
+			readyC, errC := udp.UnsafeStartUDPServer(ns, serverAddress, udp.ReplyWithReceivedMsg)
+			Consistently(errC).ShouldNot(Receive())
+			Eventually(readyC).Should(BeClosed())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// and
+			for _, dnsServer := range dnsServers {
+				Eventually(ns.UnsafeExec(func() {
+					Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(dnsServer, dnsServer)).
+						To(Equal(dnsServer.String()))
+				})).Should(BeClosed())
+			}
+
+			// and do not redirect any dns request
+			Eventually(ns.UnsafeExec(func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(randomAddressDnsRequest, randomAddressDnsRequest))
+			})).ShouldNot(BeClosed())
+
+			// then
+			Consistently(errC).ShouldNot(Receive())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			lockedPorts := []uint16{consts.DNSPort}
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(1, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
+				entry := Entry(EntryDescription(desc), randomPorts[0])
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting with specific IP", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().
+			WithBeforeExecFuncs(sysctl.SetLocalPortRange(32768, 32770)).
+			Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to provided port",
+		func(port uint16) {
+			// given
+			uid := uintptr(5678)
+			dnsServers := getDnsServers("testdata/resolv4-conntrack.conf", 1, false)
+			s1Address := fmt.Sprintf("%s:%d", dnsServers[0].IP.String(), consts.DNSPort)
+			s2Address := fmt.Sprintf("%s:%d", consts.LocalhostIPv4, port)
+			notRedirected := udp.GenRandomAddressIPv4(consts.DNSPort).AddrPort().String()
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					DNS: config.DNS{
+						Enabled:            true,
+						Port:               port,
+						ConntrackZoneSplit: true,
+						CaptureAll:         false,
+						ResolvConfigPath:   "testdata/resolv4.conf",
+					},
+				},
+				Owner:         config.Owner{UID: strconv.Itoa(int(uid))},
+				RuntimeOutput: ioutil.Discard,
+			}
+			want := map[string]uint{
+				s1Address: blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,
+				s2Address: blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,
+			}
+
+			s1ReadyC, s1ErrC := udp.UnsafeStartUDPServer(
+				ns,
+				s1Address,
+				udp.ReplyWithLocalAddr,
+			)
+			Consistently(s1ErrC).ShouldNot(Receive())
+			Eventually(s1ReadyC).Should(BeClosed())
+
+			s2ReadyC, s2ErrC := udp.UnsafeStartUDPServer(
+				ns,
+				s2Address,
+				udp.ReplyWithLocalAddr,
+				sysctl.SetUnprivilegedPortStart(0),
+				syscall.SetUID(uid),
+			)
+			Consistently(s2ErrC).ShouldNot(Receive())
+			Eventually(s2ReadyC).Should(BeClosed())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			results := udp.NewResultMap()
+
+			exec1ErrC := ns.UnsafeExecInLoop(
+				blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,
+				time.Millisecond,
+				func() {
+					Expect(udp.DialAddrAndIncreaseResultMap(s1Address, results)).To(Succeed())
+				},
+				syscall.SetUID(uid),
+			)
+
+			exec2ErrC := ns.UnsafeExecInLoop(
+				blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,
+				time.Millisecond,
+				func() {
+					Expect(udp.DialAddrAndIncreaseResultMap(s1Address, results)).To(Succeed())
+				},
+			)
+
+			exec3ErrC := ns.UnsafeExecInLoop(
+				blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,
+				time.Millisecond,
+				func() {
+					Expect(udp.DialAddrAndIncreaseResultMap(notRedirected, results)).ToNot(Succeed())
+				},
+			)
+
+			Consistently(exec1ErrC).ShouldNot(Receive())
+			Consistently(exec2ErrC).ShouldNot(Receive())
+			Consistently(exec3ErrC).ShouldNot(Receive())
+			Eventually(exec1ErrC, blackbox_tests.DNSConntrackZoneSplittingTestTimeout).
+				Should(BeClosed())
+			Eventually(exec2ErrC, blackbox_tests.DNSConntrackZoneSplittingTestTimeout).
+				Should(BeClosed())
+			Eventually(exec3ErrC, blackbox_tests.DNSConntrackZoneSplittingTestTimeout).
+				ShouldNot(BeClosed())
+
+			Expect(results.GetFinalResults()).To(BeEquivalentTo(want))
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			lockedPorts := []uint16{consts.DNSPort}
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				ports := socket.GenerateRandomPortsSlice(1, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, ports...)
+				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
+				entry := Entry(EntryDescription(desc), ports[0])
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+func getDnsServers(configPath string, expectedServers int, isIpv6 bool) []*net.UDPAddr {
+	var dnsServers []*net.UDPAddr
+	configPath, err := filepath.Abs(configPath)
+	Expect(err).ToNot(HaveOccurred())
+
+	ipv4, ipv6, err := builder.GetDnsServers(configPath)
+	Expect(err).ToNot(HaveOccurred())
+
+	dnsAddresses := ipv4
+	if isIpv6 {
+		dnsAddresses = ipv6
+	}
+	Expect(dnsAddresses).To(HaveLen(expectedServers))
+	for _, dnsServer := range dnsAddresses {
+		dnsServers = append(dnsServers, &net.UDPAddr{
+			IP:   net.ParseIP(dnsServer),
+			Port: int(consts.DNSPort),
+		})
+	}
+	return dnsServers
+}

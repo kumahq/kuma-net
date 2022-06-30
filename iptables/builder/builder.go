@@ -57,7 +57,7 @@ func (t *IPTables) Build(verbose bool) string {
 	return strings.Join(tables, separator) + "\n"
 }
 
-func BuildIPTables(cfg config.Config, ipv6 bool) (string, error) {
+func BuildIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string, error) {
 	cfg = config.MergeConfigWithDefaults(cfg)
 
 	loopbackIface, err := getLoopback()
@@ -66,8 +66,8 @@ func BuildIPTables(cfg config.Config, ipv6 bool) (string, error) {
 	}
 
 	return newIPTables(
-		buildRawTable(cfg),
-		buildNatTable(cfg, loopbackIface.Name, ipv6),
+		buildRawTable(cfg, dnsServers),
+		buildNatTable(cfg, dnsServers, loopbackIface.Name, ipv6),
 		buildMangleTable(cfg),
 	).Build(cfg.Verbose), nil
 }
@@ -114,7 +114,7 @@ func runRestoreCmd(cmdName string, f *os.File) (string, error) {
 	return string(output), nil
 }
 
-func restoreIPTables(cfg config.Config, ipv6 bool) (string, error) {
+func restoreIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string, error) {
 	cfg = config.MergeConfigWithDefaults(cfg)
 
 	rulesFile, err := createRulesFile(cfg.IPv6)
@@ -124,7 +124,7 @@ func restoreIPTables(cfg config.Config, ipv6 bool) (string, error) {
 	defer rulesFile.Close()
 	defer os.Remove(rulesFile.Name())
 
-	rules, err := BuildIPTables(cfg, ipv6)
+	rules, err := BuildIPTables(cfg, dnsServers, ipv6)
 	if err != nil {
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
 	}
@@ -144,13 +144,23 @@ func restoreIPTables(cfg config.Config, ipv6 bool) (string, error) {
 // RestoreIPTables
 // TODO (bartsmykla): add validation if ip{,6}tables are available
 func RestoreIPTables(cfg config.Config) (string, error) {
-	output, err := restoreIPTables(cfg, false)
+	var err error
+
+	dnsIpv4, dnsIpv6 := []string{}, []string{}
+	if cfg.ShouldRedirectDNS() && !cfg.ShouldCaptureAllDNS() {
+		dnsIpv4, dnsIpv6, err = GetDnsServers(cfg.Redirect.DNS.ResolvConfigPath)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	output, err := restoreIPTables(cfg, dnsIpv4, false)
 	if err != nil {
 		return "", fmt.Errorf("cannot restore ipv4 iptable rules: %s", err)
 	}
 
 	if cfg.IPv6 {
-		ipv6Output, err := restoreIPTables(cfg, true)
+		ipv6Output, err := restoreIPTables(cfg, dnsIpv6, true)
 		if err != nil {
 			return "", fmt.Errorf("cannot restore ipv6 iptable rules: %s", err)
 		}

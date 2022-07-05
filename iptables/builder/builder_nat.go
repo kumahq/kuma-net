@@ -11,6 +11,14 @@ import (
 func buildMeshInbound(cfg config.TrafficFlow, prefix string, meshInboundRedirect string) *Chain {
 	meshInbound := NewChain(cfg.Chain.GetFullName(prefix))
 
+	if !cfg.Enabled {
+		meshInbound.Append(
+			Protocol(Tcp()),
+			Jump(Return()),
+		)
+		return meshInbound
+	}
+
 	// Excluded inbound ports
 	for _, port := range cfg.ExcludePorts {
 		meshInbound.Append(
@@ -43,7 +51,17 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 		localhost = LocalhostCIDRIPv6
 	}
 
-	meshOutbound := NewChain(outboundChainName).
+	meshOutbound := NewChain(outboundChainName)
+
+	if !cfg.Redirect.Outbound.Enabled {
+		meshOutbound.Append(
+			Protocol(Tcp()),
+			Jump(Return()),
+		)
+		return meshOutbound
+	}
+
+	meshOutbound = meshOutbound.
 		// ipv4:
 		//   when tcp_packet to 192.168.0.10:7777 arrives ⤸
 		//   iptables#nat ⤸

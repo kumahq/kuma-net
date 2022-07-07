@@ -7,7 +7,10 @@ import (
 	"github.com/kumahq/kuma-net/iptables/table"
 )
 
-func buildRawTable(cfg config.Config) *table.RawTable {
+func buildRawTable(
+	cfg config.Config,
+	dnsServers []string,
+) *table.RawTable {
 	raw := table.Raw()
 
 	if cfg.ShouldConntrackZoneSplit() {
@@ -21,17 +24,34 @@ func buildRawTable(cfg config.Config) *table.RawTable {
 				Protocol(Udp(SourcePort(cfg.Redirect.DNS.Port))),
 				Match(Owner(Uid(cfg.Owner.UID))),
 				Jump(Ct(Zone("2"))),
-			).
-			Append(
+			)
+
+		if cfg.ShouldCaptureAllDNS() {
+			raw.Output().Append(
 				Protocol(Udp(DestinationPort(DNSPort))),
 				Jump(Ct(Zone("2"))),
 			)
 
-		raw.Prerouting().
-			Append(
-				Protocol(Udp(SourcePort(DNSPort))),
-				Jump(Ct(Zone("1"))),
-			)
+			raw.Prerouting().
+				Append(
+					Protocol(Udp(SourcePort(DNSPort))),
+					Jump(Ct(Zone("1"))),
+				)
+		} else {
+			for _, ip := range dnsServers {
+				raw.Output().Append(
+					Destination(ip),
+					Protocol(Udp(DestinationPort(DNSPort))),
+					Jump(Ct(Zone("2"))),
+				)
+				raw.Prerouting().
+					Append(
+						Destination(ip),
+						Protocol(Udp(SourcePort(DNSPort))),
+						Jump(Ct(Zone("1"))),
+					)
+			}
+		}
 	}
 
 	return raw

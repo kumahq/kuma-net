@@ -19,12 +19,15 @@ type TrafficFlow struct {
 	Chain         Chain
 	RedirectChain Chain
 	ExcludePorts  []uint16
+	IncludePorts  []uint16
 }
 
 type DNS struct {
 	Enabled            bool
+	CaptureAll         bool
 	Port               uint16
 	ConntrackZoneSplit bool
+	ResolvConfigPath   string
 }
 
 type Redirect struct {
@@ -73,6 +76,13 @@ func (c Config) ShouldRedirectDNS() bool {
 	return c.Redirect.DNS.Enabled
 }
 
+// ShouldCaptureAllDNS is just a convenience function which can be used in
+// iptables conditional command generations instead of inlining anonymous functions
+// i.e. AppendIf(ShouldCaptureAllDNS, Match(...), Jump(Drop()))
+func (c Config) ShouldCaptureAllDNS() bool {
+	return c.Redirect.DNS.CaptureAll
+}
+
 // ShouldConntrackZoneSplit is a function which will check if DNS redirection and
 // conntrack zone splitting settings are enabled (return false if not), and then
 // will verify if there is conntrack iptables extension available to apply
@@ -110,6 +120,7 @@ func defaultConfig() Config {
 				Chain:         Chain{Name: "MESH_INBOUND"},
 				RedirectChain: Chain{Name: "MESH_INBOUND_REDIRECT"},
 				ExcludePorts:  []uint16{},
+				IncludePorts:  []uint16{},
 			},
 			Outbound: TrafficFlow{
 				Enabled:       true,
@@ -117,8 +128,15 @@ func defaultConfig() Config {
 				Chain:         Chain{Name: "MESH_OUTBOUND"},
 				RedirectChain: Chain{Name: "MESH_OUTBOUND_REDIRECT"},
 				ExcludePorts:  []uint16{},
+				IncludePorts:  []uint16{},
 			},
-			DNS: DNS{Port: 15053, Enabled: false, ConntrackZoneSplit: true},
+			DNS: DNS{
+				Port:               15053,
+				Enabled:            false,
+				CaptureAll:         true,
+				ConntrackZoneSplit: true,
+				ResolvConfigPath:   "/etc/resolv.conf",
+			},
 		},
 		DropInvalidPackets: false,
 		IPv6:               false,
@@ -162,6 +180,10 @@ func MergeConfigWithDefaults(cfg Config) Config {
 		result.Redirect.Inbound.ExcludePorts = cfg.Redirect.Inbound.ExcludePorts
 	}
 
+	if len(cfg.Redirect.Inbound.IncludePorts) > 0 {
+		result.Redirect.Inbound.IncludePorts = cfg.Redirect.Inbound.IncludePorts
+	}
+
 	// .Redirect.Outbound
 	result.Redirect.Outbound.Enabled = cfg.Redirect.Outbound.Enabled
 	if cfg.Redirect.Outbound.Port != 0 {
@@ -180,9 +202,17 @@ func MergeConfigWithDefaults(cfg Config) Config {
 		result.Redirect.Outbound.ExcludePorts = cfg.Redirect.Outbound.ExcludePorts
 	}
 
+	if len(cfg.Redirect.Outbound.IncludePorts) > 0 {
+		result.Redirect.Outbound.IncludePorts = cfg.Redirect.Outbound.IncludePorts
+	}
+
 	// .Redirect.DNS
 	result.Redirect.DNS.Enabled = cfg.Redirect.DNS.Enabled
 	result.Redirect.DNS.ConntrackZoneSplit = cfg.Redirect.DNS.ConntrackZoneSplit
+	result.Redirect.DNS.CaptureAll = cfg.Redirect.DNS.CaptureAll
+	if cfg.Redirect.DNS.ResolvConfigPath != "" {
+		result.Redirect.DNS.ResolvConfigPath = cfg.Redirect.DNS.ResolvConfigPath
+	}
 
 	if cfg.Redirect.DNS.Port != 0 {
 		result.Redirect.DNS.Port = cfg.Redirect.DNS.Port

@@ -11,18 +11,27 @@ import (
 func buildMeshInbound(cfg config.TrafficFlow, prefix string, meshInboundRedirect string) *Chain {
 	meshInbound := NewChain(cfg.Chain.GetFullName(prefix))
 
-	// Excluded inbound ports
-	for _, port := range cfg.ExcludePorts {
+	// Include inbound ports
+	for _, port := range cfg.IncludePorts {
 		meshInbound.Append(
 			Protocol(Tcp(DestinationPort(port))),
-			Jump(Return()),
+			Jump(ToUserDefinedChain(meshInboundRedirect)),
 		)
 	}
 
-	meshInbound.Append(
-		Protocol(Tcp()),
-		Jump(ToUserDefinedChain(meshInboundRedirect)),
-	)
+	if len(cfg.IncludePorts) == 0 {
+		// Excluded outbound ports
+		for _, port := range cfg.ExcludePorts {
+			meshInbound.Append(
+				Protocol(Tcp(DestinationPort(port))),
+				Jump(Return()),
+			)
+		}
+		meshInbound.Append(
+			Protocol(Tcp()),
+			Jump(ToUserDefinedChain(meshInboundRedirect)),
+		)
+	}
 
 	return meshInbound
 }
@@ -33,6 +42,8 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(prefix)
 	outboundRedirectChainName := cfg.Redirect.Outbound.RedirectChain.GetFullName(prefix)
 	excludePorts := cfg.Redirect.Outbound.ExcludePorts
+	includePorts := cfg.Redirect.Outbound.IncludePorts
+	hasIncludedPorts := len(includePorts) > 0
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
 
@@ -43,7 +54,18 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 		localhost = LocalhostCIDRIPv6
 	}
 
-	meshOutbound := NewChain(outboundChainName).
+	meshOutbound := NewChain(outboundChainName)
+
+	// Excluded outbound ports
+	if !hasIncludedPorts {
+		for _, port := range excludePorts {
+			meshOutbound.Append(
+				Protocol(Tcp(DestinationPort(port))),
+				Jump(Return()),
+			)
+		}
+	}
+	meshOutbound.
 		// ipv4:
 		//   when tcp_packet to 192.168.0.10:7777 arrives ⤸
 		//   iptables#nat ⤸
@@ -73,17 +95,7 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 			Source(Address(inboundPassthroughSourceAddress)),
 			OutInterface(loopback),
 			Jump(Return()),
-		)
-
-	// Excluded outbound ports
-	for _, port := range excludePorts {
-		meshOutbound.Append(
-			Protocol(Tcp(DestinationPort(port))),
-			Jump(Return()),
-		)
-	}
-
-	meshOutbound.
+		).
 		Append(
 			Protocol(Tcp(NotDestinationPortIf(cfg.ShouldRedirectDNS, DNSPort))),
 			OutInterface(loopback),
@@ -108,10 +120,20 @@ func buildMeshOutbound(cfg config.Config, loopback string, ipv6 bool) *Chain {
 		Append(
 			Destination(localhost),
 			Jump(Return()),
-		).
-		Append(
+		)
+
+	if hasIncludedPorts {
+		for _, port := range includePorts {
+			meshOutbound.Append(
+				Protocol(Tcp(DestinationPort(port))),
+				Jump(ToUserDefinedChain(outboundRedirectChainName)),
+			)
+		}
+	} else {
+		meshOutbound.Append(
 			Jump(ToUserDefinedChain(outboundRedirectChainName)),
 		)
+	}
 
 	return meshOutbound
 }

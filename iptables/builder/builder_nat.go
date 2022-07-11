@@ -10,6 +10,13 @@ import (
 
 func buildMeshInbound(cfg config.TrafficFlow, prefix string, meshInboundRedirect string) *Chain {
 	meshInbound := NewChain(cfg.Chain.GetFullName(prefix))
+	if !cfg.Enabled {
+		meshInbound.Append(
+			Protocol(Tcp()),
+			Jump(Return()),
+		)
+		return meshInbound
+	}
 
 	// Include inbound ports
 	for _, port := range cfg.IncludePorts {
@@ -60,6 +67,13 @@ func buildMeshOutbound(
 	}
 
 	meshOutbound := NewChain(outboundChainName)
+	if !cfg.Redirect.Outbound.Enabled {
+		meshOutbound.Append(
+			Protocol(Tcp()),
+			Jump(Return()),
+		)
+		return meshOutbound
+	}
 
 	// Excluded outbound ports
 	if !hasIncludedPorts {

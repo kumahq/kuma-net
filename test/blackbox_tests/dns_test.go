@@ -47,6 +47,12 @@ var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53", func() {
 						Port:       randomPort,
 						CaptureAll: true,
 					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+					},
 				},
 				RuntimeOutput: ioutil.Discard,
 			}
@@ -114,7 +120,11 @@ var _ = Describe("Outbound IPv4 DNS/TCP traffic to port 53", func() {
 						CaptureAll: true,
 					},
 					Outbound: config.TrafficFlow{
-						Port: outboundPort,
+						Port:    outboundPort,
+						Enabled: true,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
 					},
 				},
 				RuntimeOutput: ioutil.Discard,
@@ -196,6 +206,12 @@ var _ = Describe("Outbound IPv6 DNS/UDP traffic to port 53", func() {
 						Port:       randomPort,
 						CaptureAll: true,
 					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+					},
 				},
 				IPv6:          true,
 				RuntimeOutput: ioutil.Discard,
@@ -264,7 +280,11 @@ var _ = Describe("Outbound IPv6 DNS/TCP traffic to port 53", func() {
 						CaptureAll: true,
 					},
 					Outbound: config.TrafficFlow{
-						Port: outboundPort,
+						Port:    outboundPort,
+						Enabled: true,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
 					},
 				},
 				IPv6:          true,
@@ -351,6 +371,12 @@ var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting", func() {
 						Port:               port,
 						ConntrackZoneSplit: true,
 						CaptureAll:         true,
+					},
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
 					},
 				},
 				Owner:         config.Owner{UID: strconv.Itoa(int(uid))},
@@ -454,12 +480,19 @@ var _ = Describe("Outbound IPv6 DNS/UDP conntrack zone splitting", func() {
 			s1Address := fmt.Sprintf("%s:%d", consts.LocalhostIPv6, consts.DNSPort)
 			s2Address := fmt.Sprintf("%s:%d", consts.LocalhostIPv6, port)
 			tproxyConfig := config.Config{
+
 				Redirect: config.Redirect{
 					DNS: config.DNS{
 						Enabled:            true,
 						Port:               port,
 						ConntrackZoneSplit: true,
 						CaptureAll:         true,
+					},
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
 					},
 				},
 				IPv6:          true,

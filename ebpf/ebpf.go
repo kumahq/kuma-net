@@ -1,3 +1,5 @@
+//go:build linux
+
 package ebpf
 
 import (
@@ -139,23 +141,19 @@ func isDirEmpty(dirPath string) (bool, error) {
 		return false, err
 	}
 
-	var isEmpty []bool
 	for _, entry := range dir {
 		if !entry.IsDir() {
 			return false, nil
 		}
 
-		e, err := isDirEmpty(path.Join(dirPath, entry.Name()))
-		if err != nil {
-			return false, err
-		}
+		fullPath := path.Join(dirPath, entry.Name())
 
-		if !e {
-			isEmpty = append(isEmpty, e)
+		if isEmpty, err := isDirEmpty(fullPath); err != nil || !isEmpty {
+			return false, err
 		}
 	}
 
-	return len(isEmpty) == 0, nil
+	return true, nil
 }
 
 func InitBPFFSMaybe(fsPath string) error {

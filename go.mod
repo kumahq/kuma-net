@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	github.com/cilium/ebpf v0.9.1 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/tools v0.1.6-0.20210726203631-07bc1bf47fb2 // indirect

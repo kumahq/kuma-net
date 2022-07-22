@@ -9,13 +9,13 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kumahq/kuma-net/iptables/builder"
-	"github.com/kumahq/kuma-net/iptables/config"
 	"github.com/kumahq/kuma-net/iptables/consts"
 	"github.com/kumahq/kuma-net/test/blackbox_tests"
 	"github.com/kumahq/kuma-net/test/framework/ip"
 	"github.com/kumahq/kuma-net/test/framework/netns"
 	"github.com/kumahq/kuma-net/test/framework/socket"
 	"github.com/kumahq/kuma-net/test/framework/tcp"
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 var _ = Describe("Outbound IPv4 TCP traffic to any address:port", func() {
@@ -45,7 +45,7 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port", func() {
 						Port:    serverPort,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -124,7 +124,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -203,7 +203,7 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -299,7 +299,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -396,7 +396,7 @@ var _ = Describe("Outbound IPv4 TCP traffic only to included port", func() {
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -493,7 +493,7 @@ var _ = Describe("Outbound IPv6 TCP traffic only to included port", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -588,7 +588,7 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port", func() {
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -665,7 +665,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(

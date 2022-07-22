@@ -8,11 +8,11 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kumahq/kuma-net/iptables/builder"
-	"github.com/kumahq/kuma-net/iptables/config"
 	"github.com/kumahq/kuma-net/test/blackbox_tests"
 	"github.com/kumahq/kuma-net/test/framework/netns"
 	"github.com/kumahq/kuma-net/test/framework/socket"
 	"github.com/kumahq/kuma-net/test/framework/tcp"
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 var _ = Describe("Inbound IPv4 TCP traffic from any ports", func() {
@@ -43,7 +43,7 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports", func() {
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -119,7 +119,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -193,7 +193,7 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports except excluded ones",
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			peerAddress := ns.Veth().PeerAddress()
 
@@ -283,7 +283,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports except excluded ones",
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			peerAddress := ns.Veth().PeerAddress()
 
@@ -373,7 +373,7 @@ var _ = Describe("Inbound IPv4 TCP traffic only from included ports", func() {
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			peerAddress := ns.Veth().PeerAddress()
 
@@ -465,7 +465,7 @@ var _ = Describe("Inbound IPv6 TCP traffic only from included ports", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			peerAddress := ns.Veth().PeerAddress()
 
@@ -556,7 +556,7 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports", func() {
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -632,7 +632,7 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(

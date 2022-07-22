@@ -12,7 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kumahq/kuma-net/iptables/builder"
-	"github.com/kumahq/kuma-net/iptables/config"
 	"github.com/kumahq/kuma-net/iptables/consts"
 	"github.com/kumahq/kuma-net/test/blackbox_tests"
 	"github.com/kumahq/kuma-net/test/framework/netns"
@@ -21,6 +20,7 @@ import (
 	"github.com/kumahq/kuma-net/test/framework/sysctl"
 	"github.com/kumahq/kuma-net/test/framework/tcp"
 	"github.com/kumahq/kuma-net/test/framework/udp"
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53", func() {
@@ -54,7 +54,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53", func() {
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv4, randomPort)
 
@@ -127,7 +127,7 @@ var _ = Describe("Outbound IPv4 DNS/TCP traffic to port 53", func() {
 						Enabled: true,
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv4, dnsPort)
 
@@ -214,7 +214,7 @@ var _ = Describe("Outbound IPv6 DNS/UDP traffic to port 53", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv6, randomPort)
 
@@ -288,7 +288,7 @@ var _ = Describe("Outbound IPv6 DNS/TCP traffic to port 53", func() {
 					},
 				},
 				IPv6:          true,
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv6, dnsPort)
 
@@ -380,7 +380,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting", func() {
 					},
 				},
 				Owner:         config.Owner{UID: strconv.Itoa(int(uid))},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			want := map[string]uint{
 				s1Address: blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,
@@ -497,7 +497,7 @@ var _ = Describe("Outbound IPv6 DNS/UDP conntrack zone splitting", func() {
 				},
 				IPv6:          true,
 				Owner:         config.Owner{UID: strconv.Itoa(int(uid))},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			want := map[string]uint{
 				s1Address: blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,
@@ -601,7 +601,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53 only for addresses in
 						ResolvConfigPath: "testdata/resolv4.conf",
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv4, randomPort)
 
@@ -676,7 +676,7 @@ var _ = Describe("Outbound IPv6 DNS/UDP traffic to port 53 only for addresses in
 						ResolvConfigPath: "testdata/resolv6.conf",
 					},
 				},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 				IPv6:          true,
 			}
 			serverAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv6, randomPort)
@@ -759,7 +759,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting with specific I
 					},
 				},
 				Owner:         config.Owner{UID: strconv.Itoa(int(uid))},
-				RuntimeOutput: ioutil.Discard,
+				RuntimeStdout: ioutil.Discard,
 			}
 			want := map[string]uint{
 				s1Address: blackbox_tests.DNSConntrackZoneSplittingStressCallsAmount,

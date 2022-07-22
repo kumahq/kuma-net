@@ -63,7 +63,13 @@ type PodConfig struct {
 	ExcludeOutPorts  [MaxItemLen]uint16
 }
 
-func IpStrToUint32(ipstr string) (uint32, error) {
+type Program struct {
+	PinName          string
+	MakeLoadTarget   string
+	MakeAttachTarget string
+}
+
+func ipStrToUint32(ipstr string) (uint32, error) {
 	ip := net.ParseIP(ipstr)
 	if ip == nil {
 		return 0, fmt.Errorf("error when parsing ip string: %s", ipstr)
@@ -73,7 +79,8 @@ func IpStrToUint32(ipstr string) (uint32, error) {
 }
 
 func run(cmdToExec string, args, envVars []string, stdout, stderr io.Writer) error {
-	_, _ = stdout.Write([]byte(fmt.Sprintf("Running: %s %s %s\n", strings.Join(envVars, " "), cmdToExec, strings.Join(args, " "))))
+	_, _ = stdout.Write([]byte(fmt.Sprintf("Running: %s %s %s\n",
+		strings.Join(envVars, " "), cmdToExec, strings.Join(args, " "))))
 
 	cmd := exec.Command(cmdToExec, args...)
 	cmd.Env = append(os.Environ(), envVars...)
@@ -86,51 +93,6 @@ func run(cmdToExec string, args, envVars []string, stdout, stderr io.Writer) err
 	}
 
 	_, _ = stdout.Write([]byte("\n"))
-
-	return nil
-}
-
-func runMake(target string, cfg config.Config) error {
-	args := []string{"--directory", cfg.Ebpf.ProgramsSourcePath, target}
-	envVars := []string{
-		"MESH_MODE=kuma",
-		"USE_RECONNECT=1",
-		"DEBUG=1",
-		"PROG_MOUNT_PATH=" + cfg.Ebpf.BPFFSPath,
-	}
-
-	return run("make", args, envVars, cfg.RuntimeStdout, cfg.RuntimeStderr)
-}
-
-type Program struct {
-	PinName          string
-	MakeLoadTarget   string
-	MakeAttachTarget string
-}
-
-func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
-	var errs []string
-
-	for _, p := range programs {
-		if _, err := os.Stat(path.Join(cfg.Ebpf.BPFFSPath, p.PinName)); err != nil {
-			if os.IsNotExist(err) {
-				if err := runMake(p.MakeLoadTarget, cfg); err != nil {
-					errs = append(errs, err.Error())
-					continue
-				}
-
-				if err := runMake(p.MakeAttachTarget, cfg); err != nil {
-					errs = append(errs, err.Error())
-				}
-			} else {
-				errs = append(errs, err.Error())
-			}
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("loading and attaching ebpf programs failed:\n\t%s", strings.Join(errs, "\n\t"))
-	}
 
 	return nil
 }
@@ -154,6 +116,46 @@ func isDirEmpty(dirPath string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func runMake(target string, cfg config.Config) error {
+	args := []string{"--directory", cfg.Ebpf.ProgramsSourcePath, target}
+	envVars := []string{
+		"MESH_MODE=kuma",
+		"USE_RECONNECT=1",
+		"DEBUG=1",
+		"PROG_MOUNT_PATH=" + cfg.Ebpf.BPFFSPath,
+	}
+
+	return run("make", args, envVars, cfg.RuntimeStdout, cfg.RuntimeStderr)
+}
+
+func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
+	var errs []string
+
+	for _, p := range programs {
+		if _, err := os.Stat(path.Join(cfg.Ebpf.BPFFSPath, p.PinName)); err != nil {
+			if os.IsNotExist(err) {
+				if err := runMake(p.MakeLoadTarget, cfg); err != nil {
+					errs = append(errs, err.Error())
+					continue
+				}
+
+				if err := runMake(p.MakeAttachTarget, cfg); err != nil {
+					errs = append(errs, err.Error())
+				}
+			} else {
+				errs = append(errs, err.Error())
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("loading and attaching ebpf programs failed:\n\t%s",
+			strings.Join(errs, "\n\t"))
+	}
+
+	return nil
 }
 
 func InitBPFFSMaybe(fsPath string) error {

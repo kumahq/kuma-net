@@ -67,7 +67,7 @@ func Setup(cfg config.Config) (string, error) {
 
 	instanceIP := os.Getenv(cfg.Ebpf.InstanceIPEnvVarName)
 
-	ip, err := IpStrToUint32(instanceIP)
+	ip, err := ipStrToUint32(instanceIP)
 	if err != nil {
 		return "", err
 	}

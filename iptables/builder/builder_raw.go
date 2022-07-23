@@ -1,10 +1,10 @@
 package builder
 
 import (
-	"github.com/kumahq/kuma-net/iptables/config"
 	. "github.com/kumahq/kuma-net/iptables/consts"
 	. "github.com/kumahq/kuma-net/iptables/parameters"
 	"github.com/kumahq/kuma-net/iptables/table"
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 func buildRawTable(

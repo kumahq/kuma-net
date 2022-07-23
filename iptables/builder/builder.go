@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kumahq/kuma-net/iptables/config"
 	"github.com/kumahq/kuma-net/iptables/table"
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 type IPTables struct {
@@ -129,7 +129,7 @@ func restoreIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string,
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
 	}
 
-	if err := saveIPTablesRestoreFile(cfg.RuntimeOutput, rulesFile, rules); err != nil {
+	if err := saveIPTablesRestoreFile(cfg.RuntimeStdout, rulesFile, rules); err != nil {
 		return "", fmt.Errorf("unable to save iptables restore file: %s", err)
 	}
 
@@ -144,6 +144,10 @@ func restoreIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string,
 // RestoreIPTables
 // TODO (bartsmykla): add validation if ip{,6}tables are available
 func RestoreIPTables(cfg config.Config) (string, error) {
+	_, _ = cfg.RuntimeStdout.Write([]byte("kumactl is about to apply the " +
+		"iptables rules that will enable transparent proxying on the machine. " +
+		"The SSH connection may drop. If that happens, just reconnect again.\n"))
+
 	var err error
 
 	dnsIpv4, dnsIpv6 := []string{}, []string{}
@@ -167,6 +171,9 @@ func RestoreIPTables(cfg config.Config) (string, error) {
 
 		output += ipv6Output
 	}
+
+	_, _ = cfg.RuntimeStdout.Write([]byte("iptables set to diverge the traffic " +
+		"to Envoy.\n"))
 
 	return output, nil
 }

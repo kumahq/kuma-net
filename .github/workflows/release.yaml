@@ -1,4 +1,4 @@
-name: "build"
+name: "release"
 
 on:
   push:
@@ -13,6 +13,21 @@ on:
     - "tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf*"
     - "tools/builds/ebpf"
   workflow_dispatch:
+    inputs:
+      image-name:
+        description: "Name of the docker image"
+        type: string
+        required: true
+        default: "kumahq/kuma-net-ebpf"
+      image-tag:
+        description: "Tag for the docker image"
+        type: string
+        required: true
+      push:
+        description: "Should push the image to DockerHub"
+        type: boolean
+        required: true
+        default: false
 
 jobs:
   docker-image-ebpf:
@@ -23,6 +38,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: "Docker meta"
+      if: github.event_name != 'workflow_dispatch'
       id: meta
       uses: docker/metadata-action@v4
       with:
@@ -35,6 +51,14 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
           type=sha,prefix=0.0.0-preview.
+
+    - name: "Docker meta for workflow_dispatch"
+      if: github.event_name == 'workflow_dispatch'
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ inputs.image-name }}
+        tags: ${{ inputs.image-tag }}
 
     - name: "Set up QEMU"
       uses: docker/setup-qemu-action@v2
@@ -54,6 +78,10 @@ jobs:
       with:
         file: tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf
         platforms: linux/amd64,linux/arm64
-        push: ${{ github.event_name != 'pull_request' }}
+        push: >-
+          ${{
+            github.event_name != 'pull_request' &&
+            !(github.event_name == 'workflow_dispatch' && !inputs.push)
+          }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}

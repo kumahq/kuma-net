@@ -1,0 +1,8 @@
+ARG BASE_IMAGE_ARCH=amd64
+
+FROM --platform=linux/$BASE_IMAGE_ARCH merbridge/merbridge:0.7.0 as merbridge
+
+COPY /tools/builds/ebpf/compile.mk /app/bpf/Makefile
+COPY /tools/builds/ebpf/load-and-attach.mk /app/bpf/
+
+RUN make compile MESH_MODE=kuma DEBUG=1 USE_RECONNECT=1

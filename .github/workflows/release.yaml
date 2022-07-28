@@ -1,0 +1,98 @@
+name: "release"
+
+on:
+  push:
+    tags: [ "v*.*.* " ]
+    branches: [ "**" ]
+    paths:
+    - "tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf*"
+    - "tools/builds/ebpf"
+  pull_request:
+    branches: [ 'master' ]
+    paths:
+    - "tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf*"
+    - "tools/builds/ebpf"
+  workflow_dispatch:
+    inputs:
+      image-name:
+        description: "Name of the docker image"
+        type: string
+        required: true
+        default: "kumahq/kuma-net-ebpf"
+      image-tag:
+        description: "Tag for the docker image"
+        type: string
+        required: true
+      push:
+        description: "Should push the image to DockerHub"
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  docker-image-ebpf:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v3
+
+    - name: "Set up QEMU"
+      uses: docker/setup-qemu-action@v2
+
+    - name: "Set up Docker Buildx"
+      uses: docker/setup-buildx-action@v2
+
+    - name: "Login to DockerHub"
+      if: >-
+        ${{
+          github.event_name != 'pull_request' &&
+          !(github.event_name == 'workflow_dispatch' && !inputs.push)
+        }}
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: "Build Docker image metadata"
+      if: github.event_name != 'workflow_dispatch'
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: |
+          kumahq/kuma-net-ebpf
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr,prefix=0.0.0-preview.pr-
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha,prefix=0.0.0-preview.
+
+    - name: "Build and push"
+      if: github.event_name != 'workflow_dispatch'
+      uses: docker/build-push-action@v3
+      with:
+        file: tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+
+    - name: "Build Docker image metadata for workflow_dispatch"
+      if: github.event_name == 'workflow_dispatch'
+      id: meta-workflow-dispatch
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ inputs.image-name }}
+        tags: ${{ inputs.image-tag }}
+
+    - name: "Build and push for workflow_dispatch"
+      if: github.event_name == 'workflow_dispatch'
+      uses: docker/build-push-action@v3
+      with:
+        file: tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf
+        platforms: linux/amd64,linux/arm64
+        push: ${{ inputs.push }}
+        tags: ${{ steps.meta-workflow-dispatch.outputs.tags }}
+        labels: ${{ steps.meta-workflow-dispatch.outputs.labels }}

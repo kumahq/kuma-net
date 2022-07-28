@@ -1,0 +1,58 @@
+name: "build"
+
+on:
+  push:
+    tags: [ "v*.*.* " ]
+    branches: [ "**" ]
+    paths:
+    - "tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf*"
+    - "tools/builds/ebpf"
+  pull_request:
+    branches: [ 'master' ]
+    paths:
+    - "tools/builds/dockerfiles/Dockerfile.kuma-net-ebpf*"
+    - "tools/builds/ebpf"
+  workflow_dispatch:
+
+jobs:
+  docker-image-ebpf:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v3
+
+    - name: "Docker meta"
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: |
+          kumahq/kuma-net-ebpf
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha
+
+    - name: "Set up QEMU"
+      uses: docker/setup-qemu-action@v2
+
+    - name: "Set up Docker Buildx"
+      uses: docker/setup-buildx-action@v2
+
+    - name: "Login to DockerHub"
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: "Build and push"
+      uses: docker/build-push-action@v3
+      with:
+        file: tools/builds/Dockerfile.kuma-net-ebpf
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}

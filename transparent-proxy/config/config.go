@@ -47,10 +47,10 @@ func (c Chain) GetFullName(prefix string) string {
 }
 
 type Ebpf struct {
-	Enabled              bool
-	InstanceIPEnvVarName string
-	BPFFSPath            string
-	ProgramsSourcePath   string
+	Enabled            bool
+	InstanceIP         string
+	BPFFSPath          string
+	ProgramsSourcePath string
 }
 
 type Config struct {
@@ -153,10 +153,9 @@ func defaultConfig() Config {
 			},
 		},
 		Ebpf: Ebpf{
-			Enabled:              false,
-			InstanceIPEnvVarName: "INSTANCE_IP",
-			BPFFSPath:            "/run/kuma/bpf",
-			ProgramsSourcePath:   "/kuma/ebpf",
+			Enabled:            false,
+			BPFFSPath:          "/run/kuma/bpf",
+			ProgramsSourcePath: "/kuma/ebpf",
 		},
 		DropInvalidPackets: false,
 		IPv6:               false,
@@ -242,8 +241,8 @@ func MergeConfigWithDefaults(cfg Config) Config {
 
 	// .Ebpf
 	result.Ebpf.Enabled = cfg.Ebpf.Enabled
-	if cfg.Ebpf.InstanceIPEnvVarName != "" {
-		result.Ebpf.InstanceIPEnvVarName = cfg.Ebpf.InstanceIPEnvVarName
+	if cfg.Ebpf.InstanceIP != "" {
+		result.Ebpf.InstanceIP = cfg.Ebpf.InstanceIP
 	}
 
 	if cfg.Ebpf.BPFFSPath != "" {

@@ -65,9 +65,7 @@ func Setup(cfg config.Config) (string, error) {
 		return "", fmt.Errorf("loading pinned local_pod_ips map failed: %v", err)
 	}
 
-	instanceIP := os.Getenv(cfg.Ebpf.InstanceIPEnvVarName)
-
-	ip, err := ipStrToUint32(instanceIP)
+	ip, err := ipStrToUint32(cfg.Ebpf.InstanceIP)
 	if err != nil {
 		return "", err
 	}
@@ -110,12 +108,12 @@ func Setup(cfg config.Config) (string, error) {
 	}, ciliumebpf.UpdateAny); err != nil {
 		return "", fmt.Errorf(
 			"updating pinned local_pod_ips map with current instance IP (%s) failed: %v",
-			instanceIP,
+			cfg.Ebpf.InstanceIP,
 			err,
 		)
 	}
 
-	_, _ = cfg.RuntimeStdout.Write([]byte(fmt.Sprintf("local_pod_ips map was updated with current instance IP: %s\n\n", instanceIP)))
+	_, _ = cfg.RuntimeStdout.Write([]byte(fmt.Sprintf("local_pod_ips map was updated with current instance IP: %s\n\n", cfg.Ebpf.InstanceIP)))
 
 	return "", nil
 }

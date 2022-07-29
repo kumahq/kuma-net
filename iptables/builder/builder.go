@@ -115,8 +115,6 @@ func runRestoreCmd(cmdName string, f *os.File) (string, error) {
 }
 
 func restoreIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string, error) {
-	cfg = config.MergeConfigWithDefaults(cfg)
-
 	rulesFile, err := createRulesFile(cfg.IPv6)
 	if err != nil {
 		return "", err
@@ -144,13 +142,15 @@ func restoreIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string,
 // RestoreIPTables
 // TODO (bartsmykla): add validation if ip{,6}tables are available
 func RestoreIPTables(cfg config.Config) (string, error) {
+	cfg = config.MergeConfigWithDefaults(cfg)
+
 	_, _ = cfg.RuntimeStdout.Write([]byte("kumactl is about to apply the " +
 		"iptables rules that will enable transparent proxying on the machine. " +
 		"The SSH connection may drop. If that happens, just reconnect again.\n"))
 
 	var err error
+	var dnsIpv6, dnsIpv4 []string
 
-	dnsIpv4, dnsIpv6 := []string{}, []string{}
 	if cfg.ShouldRedirectDNS() && !cfg.ShouldCaptureAllDNS() {
 		dnsIpv4, dnsIpv6, err = GetDnsServers(cfg.Redirect.DNS.ResolvConfigPath)
 		if err != nil {

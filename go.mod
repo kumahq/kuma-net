@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/onsi/ginkgo/v2 v2.1.3
 	github.com/onsi/gomega v1.19.0
-	github.com/vishvananda/netlink v1.1.0
+	github.com/vishvananda/netlink v1.2.1-beta.2
 )
 
 require (
@@ -17,6 +17,7 @@ require (
 
 require (
 	github.com/cilium/ebpf v0.9.1 // indirect
+	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/tools v0.1.6-0.20210726203631-07bc1bf47fb2 // indirect

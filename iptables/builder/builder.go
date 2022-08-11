@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/kumahq/kuma-net/iptables/table"
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
+	"github.com/vishvananda/netlink"
 )
 
 type IPTables struct {
@@ -122,6 +124,11 @@ func restoreIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string,
 	defer rulesFile.Close()
 	defer os.Remove(rulesFile.Name())
 
+	err = configureIPv6Address(ipv6)
+	if err != nil {
+		return "", err
+	}
+
 	rules, err := BuildIPTables(cfg, dnsServers, ipv6)
 	if err != nil {
 		return "", fmt.Errorf("unable to build iptable rules: %s", err)
@@ -176,4 +183,37 @@ func RestoreIPTables(cfg config.Config) (string, error) {
 		"to Envoy.\n"))
 
 	return output, nil
+}
+
+// configureIPv6Address sets up a new IP address on local interface. This is needed
+// for IPv6 but not IPv4, as IPv4 defaults to `netmask 255.0.0.0`, which allows binding to addresses
+// in the 127.x.y.z range, while IPv6 defaults to `prefixlen 128` which allows binding only to ::1.
+// Equivalent to `ip -6 addr add "::6/128" dev lo`
+func configureIPv6Address(ipv6 bool) error {
+	if !ipv6 {
+		return nil
+	}
+	link, err := netlink.LinkByName("lo")
+	if err != nil {
+		return fmt.Errorf("failed to find 'lo' link: %v", err)
+	}
+	// Equivalent to `ip -6 addr add "::6/128" dev lo`
+	address := &net.IPNet{IP: net.ParseIP("::6"), Mask: net.CIDRMask(128, 128)}
+	addr := &netlink.Addr{IPNet: address}
+
+	err = netlink.AddrAdd(link, addr)
+	if ignoreExists(err) != nil {
+		return fmt.Errorf("failed to add IPv6 inbound address: %v", err)
+	}
+	return nil
+}
+
+func ignoreExists(err error) error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "file exists") {
+		return nil
+	}
+	return err
 }

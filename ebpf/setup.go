@@ -65,6 +65,14 @@ func Setup(cfg config.Config) (string, error) {
 		return "", fmt.Errorf("loading pinned local_pod_ips map failed: %v", err)
 	}
 
+	tcEbpfObj := fmt.Sprintf("%s/mb_tc.o", cfg.Ebpf.ProgramsSourcePath)
+
+	if iface, err := getNonLoopbackInterface(); err != nil {
+		return "", fmt.Errorf("getting non-loopback interface failed: %v", err)
+	} else if err := AttachTC(iface.Name, tcEbpfObj); err != nil {
+		return "", fmt.Errorf("attaching tc failed: %v", err)
+	}
+
 	ip, err := ipStrToUint32(cfg.Ebpf.InstanceIP)
 	if err != nil {
 		return "", err

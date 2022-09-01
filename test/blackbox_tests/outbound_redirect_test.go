@@ -291,12 +291,12 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 		mainLink, peerLink, linkErr := netns.NewLinkPair()
 		Expect(linkErr).To(BeNil())
 
-		ns1Address, addrErr := netlink.ParseAddr("2001:db8:abcd:0012::1/64")
+		ns1Address, addrErr := netlink.ParseAddr("64:ff9b:1::192.168.0.1/48")
 		Expect(addrErr).To(BeNil())
 		ns, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(mainLink, ns1Address).Build()
 		Expect(err).To(BeNil())
 
-		ns2Address, addrErr := netlink.ParseAddr("2001:db8:abcd:0012::2/64")
+		ns2Address, addrErr := netlink.ParseAddr("64:ff9b:1::192.168.0.2/48")
 		Expect(addrErr).To(BeNil())
 		ns2, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(peerLink, ns2Address).Build()
 		Expect(err).To(BeNil())

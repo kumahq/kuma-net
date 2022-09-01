@@ -290,9 +290,8 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Outbound: config.TrafficFlow{
-						Enabled:      true,
-						Port:         serverPort,
-						ExcludePorts: []uint16{excludedPort},
+						Enabled: true,
+						Port:    serverPort,
 					},
 					Inbound: config.TrafficFlow{
 						Enabled: true,

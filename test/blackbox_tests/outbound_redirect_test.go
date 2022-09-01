@@ -2,11 +2,6 @@ package blackbox_tests_test
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"io/ioutil"
-	"net"
-
 	"github.com/kumahq/kuma-net/iptables/builder"
 	"github.com/kumahq/kuma-net/iptables/consts"
 	"github.com/kumahq/kuma-net/test/blackbox_tests"
@@ -15,6 +10,11 @@ import (
 	"github.com/kumahq/kuma-net/test/framework/socket"
 	"github.com/kumahq/kuma-net/test/framework/tcp"
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/vishvananda/netlink"
+	"io/ioutil"
+	"net"
 )
 
 var _ = Describe("Outbound IPv4 TCP traffic to any address:port", func() {
@@ -180,9 +180,16 @@ var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded
 	var ns2 *netns.NetNS
 
 	BeforeEach(func() {
-		ns, err = netns.NewNetNSBuilder().Build()
+		veth := netns.NewVeth("shared-", 1, 2)
+		Expect(netlink.LinkAdd(veth)).To(Succeed())
+		mainLink, err2 := netlink.LinkByName(veth.Name)
+		Expect(err2).To(BeNil())
+		peerLink, err2 := netlink.LinkByName(veth.PeerName)
+		Expect(err2).To(BeNil())
+
+		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink).WithLinkAddress("10.255.0.1/24").Build()
 		Expect(err).To(BeNil())
-		ns2, err = netns.NewNetNSBuilder().Build()
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink).WithLinkAddress("10.255.0.2/24").Build()
 		Expect(err).To(BeNil())
 	})
 
@@ -234,23 +241,23 @@ var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded
 			})).Should(BeClosed())
 
 			// then
-			//Eventually(ns.UnsafeExec(func() {
-			//	address := ip.GenRandomIPv4()
-			//
-			//	Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
-			//		To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
-			//})).Should(BeClosed())
+			Eventually(ns.UnsafeExec(func() {
+				address := ip.GenRandomIPv4()
+
+				Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
+					To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
+			})).Should(BeClosed())
 
 			// then
 			Eventually(ns.UnsafeExec(func() {
-				reply, err := tcp.DialIPWithPortAndGetReply(ns2.Veth().PeerAddress(), excludedPort)
+				reply, err := tcp.DialIPWithPortAndGetReply(ns2.SharedLinkAddress().IP, excludedPort)
 				fmt.Printf("** reply from excluded port %d %s", excludedPort, reply)
 				Expect(err).To(Not(HaveOccurred()))
 				Expect(reply).To(Equal("excluded"))
 			})).Should(BeClosed())
 
 			// then
-			//Eventually(tcpErrC).Should(BeClosed())
+			Eventually(tcpErrC).Should(BeClosed())
 			Eventually(excludedErrC).Should(BeClosed())
 		},
 		func() []TableEntry {

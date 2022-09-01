@@ -123,8 +123,9 @@ kind/deploy/iptables: helm/add/kuma
 	make kind/deploy/kuma/wait
 
 run/perf:
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) exec -it deployment/wrk -n kuma-perf -c wrk -- wrk -c$(WRK_CONN) -t$(WRK_THREAD) -d$(WRK_DURATION)s --latency http://$(KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) get services/http-echo -n kuma-perf -o jsonpath="{.spec.clusterIP}"):5000/
-
+	CLUSTER_IP=$(shell KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) get services/http-echo -n kuma-perf -o jsonpath="{.spec.clusterIP}"); \
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) exec -it deployment/wrk -n kuma-perf -c wrk -- wrk -c$(WRK_CONN) -t$(WRK_THREAD) -d$(WRK_DURATION)s --latency http://$${CLUSTER_IP}:5000/
+	
 helm/add/kuma:
 	$(HELM_PATH) repo add kuma https://kumahq.github.io/charts && \
 	$(HELM_PATH) repo update

@@ -36,15 +36,15 @@ func NewLinkPair() (netlink.Link, netlink.Link, error) {
 	veth := newVeth("shared-", suffixA, suffixB)
 	err = netlink.LinkAdd(veth)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cannot add link: %s", err)
 	}
 	mainLink, err := netlink.LinkByName(veth.Name)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cannot link mainLink by name: %s", err)
 	}
 	peerLink, err := netlink.LinkByName(veth.PeerName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cannot link peerLink by name: %s", err)
 	}
 
 	return mainLink, peerLink, err

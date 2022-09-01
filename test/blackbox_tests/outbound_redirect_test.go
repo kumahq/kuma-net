@@ -283,9 +283,9 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 	BeforeEach(func() {
 		mainLink, peerLink, linkErr := netns.NewLinkPair()
 		Expect(linkErr).To(BeNil())
-		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, "::ffff:c0a8:1/64").Build()
+		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, "::ffff:c0a8:1/64").WithIPv6(true).Build()
 		Expect(err).To(BeNil())
-		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "::ffff:c0a8:2/64").Build()
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "::ffff:c0a8:2/64").WithIPv6(true).Build()
 		Expect(err).To(BeNil())
 	})
 

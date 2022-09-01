@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: wrk
+  name: wrk
+  namespace: kuma-perf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wrk
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: wrk
+    spec:
+      containers:
+      - image: lukdzied/wrk:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            memory: "2048Mi"
+            cpu: "1"
+        name: wrk
+        command: ["/bin/sleep", "3650d"]
+        resources: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wrk
+  namespace: kuma-perf
+spec:
+  selector:
+    app: wrk
+  ports:
+  - protocol: TCP
+    appProtocol: http
+    port: 5000
+---

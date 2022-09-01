@@ -343,6 +343,80 @@ var _ = Describe("Outbound IPv6 DNS/TCP traffic to port 53", func() {
 	)
 })
 
+var _ = FDescribe("Outbound IPv4 DNS/UDP with UID port exclusion", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().
+			WithBeforeExecFuncs(sysctl.SetLocalPortRange(32768, 32770)).
+			Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	It("should exclude ports by uids", func() {
+		dnsUserUid := uintptr(4201)
+		s1Address, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ns.Veth().PeerAddress(), consts.DNSPort))
+		s2Address, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", consts.LocalhostIPv4, 1001))
+
+		tproxyConfig := config.Config{
+			Redirect: config.Redirect{
+				Outbound: config.TrafficFlow{
+					Enabled: true,
+					ExcludePortsForUIDs: []config.UIDsToPorts{{
+						UIDs:  config.ValueOrRangeList(strconv.Itoa(int(dnsUserUid))),
+						Ports: config.ValueOrRangeList(strconv.Itoa(int(consts.DNSPort))),
+					}},
+				},
+			},
+			RuntimeStdout: ioutil.Discard,
+		}
+
+		// given two servers
+		s1ReadyC, s1ErrC := udp.UnsafeStartUDPServer(
+			ns,
+			s1Address.String(),
+			udp.ReplyWithLocalAddr,
+		)
+		Consistently(s1ErrC).ShouldNot(Receive())
+		Eventually(s1ReadyC).Should(BeClosed())
+
+		s2ReadyC, s2ErrC := udp.UnsafeStartUDPServer(
+			ns,
+			s2Address.String(),
+			udp.ReplyWithLocalAddr,
+		)
+		Consistently(s2ErrC).ShouldNot(Receive())
+		Eventually(s2ReadyC).Should(BeClosed())
+
+		// when
+		Eventually(ns.UnsafeExec(func() {
+			Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+		})).Should(BeClosed())
+
+		// then
+		exec1ErrC := ns.UnsafeExec(
+			func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(s1Address, s1Address)).To(Equal(s1Address.String()))
+			},
+			syscall.SetUID(dnsUserUid),
+		)
+
+		exec2ErrC := ns.UnsafeExec(
+			func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(s2Address, s2Address)).To(Equal(s2Address.String()))
+			},
+		)
+
+		Consistently(exec1ErrC).ShouldNot(Receive())
+		Consistently(exec2ErrC).ShouldNot(Receive())
+	})
+})
+
 var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting", func() {
 	var err error
 	var ns *netns.NetNS

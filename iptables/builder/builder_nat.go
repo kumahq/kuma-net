@@ -211,6 +211,24 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 			}
 		}
 	}
+	// Excluded outbound ports for UIDs
+	for _, uIDsToPorts := range cfg.Redirect.Outbound.ExcludePortsForUIDs {
+		var protocol *Parameter
+
+		if uIDsToPorts.Protocol == "tcp" {
+			protocol = Protocol(Tcp(DestinationPortRangeOrValue(uIDsToPorts)))
+		} else if uIDsToPorts.Protocol == "udp" {
+			protocol = Protocol(Udp(DestinationPortRangeOrValue(uIDsToPorts)))
+		} else {
+			// TODO: make an enum here
+		}
+
+		nat.Output().Append(
+			protocol,
+			Match(Owner(UidRangeOrValue(uIDsToPorts))),
+			Jump(Return()),
+		)
+	}
 	nat.Output().
 		Append(
 			Protocol(Tcp()),

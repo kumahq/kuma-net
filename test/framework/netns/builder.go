@@ -330,8 +330,9 @@ func (b *Builder) Build() (*NetNS, error) {
 			if err := netlink.LinkSetUp(*b.sharedLink); err != nil {
 				done <- fmt.Errorf("cannot set shared link interface up: %s", err)
 			}
+
 			if err := netlink.AddrAdd(*b.sharedLink, b.sharedLinkAddress); err != nil {
-				done <- fmt.Errorf("cannot add address to link interface: %s", err)
+				done <- fmt.Errorf("cannot add address %s to link %s interface: %s", b.sharedLinkAddress.String(), *(b.sharedLink), err)
 			}
 		}
 

@@ -285,7 +285,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 		Expect(linkErr).To(BeNil())
 		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, "::ffff:c0a8:1/64").Build()
 		Expect(err).To(BeNil())
-		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "::ffff:c0a8:1/64").Build()
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "::ffff:c0a8:2/64").Build()
 		Expect(err).To(BeNil())
 	})
 

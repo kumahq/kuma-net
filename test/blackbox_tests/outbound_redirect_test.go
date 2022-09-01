@@ -2,11 +2,10 @@ package blackbox_tests_test
 
 import (
 	"fmt"
-	"io/ioutil"
-	"net"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"io/ioutil"
+	"net"
 
 	"github.com/kumahq/kuma-net/iptables/builder"
 	"github.com/kumahq/kuma-net/iptables/consts"
@@ -178,14 +177,18 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded ones", func() {
 	var err error
 	var ns *netns.NetNS
+	var ns2 *netns.NetNS
 
 	BeforeEach(func() {
 		ns, err = netns.NewNetNSBuilder().Build()
+		Expect(err).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().Build()
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
 		Expect(ns.Cleanup()).To(Succeed())
+		Expect(ns2.Cleanup()).To(Succeed())
 	})
 
 	DescribeTable("should be redirected to outbound port",
@@ -195,15 +198,16 @@ var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Outbound: config.TrafficFlow{
-						Enabled: true,
-						Port:    serverPort,
-						//ExcludePorts: []uint16{excludedPort},
+						Enabled:      true,
+						Port:         serverPort,
+						ExcludePorts: []uint16{excludedPort},
 					},
 					Inbound: config.TrafficFlow{
 						Enabled: true,
 					},
 				},
 				//RuntimeStdout: ioutil.Discard,
+				Verbose: true,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -216,7 +220,7 @@ var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded
 			Consistently(tcpErrC).ShouldNot(Receive())
 
 			excludedReadyC, excludedErrC := tcp.UnsafeStartTCPServer(
-				ns,
+				ns2,
 				fmt.Sprintf(":%d", excludedPort),
 				tcp.ReplyWith("excluded"),
 				tcp.CloseConn,
@@ -230,23 +234,23 @@ var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded
 			})).Should(BeClosed())
 
 			// then
-			Eventually(ns.UnsafeExec(func() {
-				address := ip.GenRandomIPv4()
-
-				Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
-					To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
-			})).Should(BeClosed())
+			//Eventually(ns.UnsafeExec(func() {
+			//	address := ip.GenRandomIPv4()
+			//
+			//	Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
+			//		To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
+			//})).Should(BeClosed())
 
 			// then
 			Eventually(ns.UnsafeExec(func() {
-				reply, err := tcp.DialIPWithPortAndGetReply(net.IPv4zero, excludedPort)
+				reply, err := tcp.DialIPWithPortAndGetReply(ns2.Veth().PeerAddress(), excludedPort)
 				fmt.Printf("** reply from excluded port %d %s", excludedPort, reply)
 				Expect(err).To(Not(HaveOccurred()))
 				Expect(reply).To(Equal("excluded"))
 			})).Should(BeClosed())
 
 			// then
-			Eventually(tcpErrC).Should(BeClosed())
+			//Eventually(tcpErrC).Should(BeClosed())
 			Eventually(excludedErrC).Should(BeClosed())
 		},
 		func() []TableEntry {

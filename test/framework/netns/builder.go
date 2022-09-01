@@ -315,7 +315,7 @@ func (b *Builder) Build() (*NetNS, error) {
 			done <- fmt.Errorf("cannot set peer veth interface up: %s", err)
 		}
 
-		if err := netlink.RouteAdd(&netlink.Route{Gw: mainAddr.IP}); err != nil {
+		if err := netlink.RouteAdd(&netlink.Route{Gw: mainAddr.IP, Dst: &net.IPNet{IP: net.ParseIP("10.0.0.0"), Mask: net.CIDRMask(8, 32)}}); err != nil {
 			done <- fmt.Errorf("cannot set the default route: %s", err)
 		}
 

@@ -242,6 +242,7 @@ func buildNatTable(
 	loopback string,
 	ipv6 bool,
 ) *table.NatTable {
+
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)

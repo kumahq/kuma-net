@@ -271,6 +271,102 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 	)
 })
 
+var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded ones by uid", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to outbound port",
+		func(serverPort, randomPort, excludedPort uint16) {
+			// given
+
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+						Port:    serverPort,
+						//ExcludePorts: []uint16{excludedPort},
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+				},
+				RuntimeStdout: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", serverPort),
+				tcp.ReplyWithOriginalDstIPv4,
+				tcp.CloseConn,
+			)
+			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
+
+			excludedReadyC, excludedErrC := tcp.UnsafeStartTCPServer(
+				ns,
+				fmt.Sprintf(":%d", excludedPort),
+				tcp.ReplyWith("excluded"),
+				tcp.CloseConn,
+			)
+			Eventually(excludedReadyC).Should(BeClosed())
+			Consistently(excludedErrC).ShouldNot(Receive())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				address := ip.GenRandomIPv4()
+
+				Expect(tcp.DialIPWithPortAndGetReply(address, randomPort)).
+					To(Equal(fmt.Sprintf("%s:%d", address, randomPort)))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				Expect(tcp.DialIPWithPortAndGetReply(net.IPv4zero, excludedPort)).
+					To(Equal("excluded"))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
+			Eventually(excludedErrC).Should(BeClosed())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			var lockedPorts []uint16
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(3, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %%d (excluded: %%d)")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+					randomPorts[2],
+				)
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
 var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded ones", func() {
 	var err error
 	var ns *netns.NetNS

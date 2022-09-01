@@ -241,6 +241,10 @@ func MergeConfigWithDefaults(cfg Config) Config {
 		result.Redirect.Outbound.IncludePorts = cfg.Redirect.Outbound.IncludePorts
 	}
 
+	if len(cfg.Redirect.Outbound.ExcludePortsForUIDs) > 0 {
+		result.Redirect.Outbound.ExcludePortsForUIDs = cfg.Redirect.Outbound.ExcludePortsForUIDs
+	}
+
 	// .Redirect.DNS
 	result.Redirect.DNS.Enabled = cfg.Redirect.DNS.Enabled
 	result.Redirect.DNS.ConntrackZoneSplit = cfg.Redirect.DNS.ConntrackZoneSplit

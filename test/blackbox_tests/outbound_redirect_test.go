@@ -12,6 +12,7 @@ import (
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/vishvananda/netlink"
 	"io/ioutil"
 	"net"
 )
@@ -181,9 +182,15 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 	BeforeEach(func() {
 		mainLink, peerLink, linkErr := netns.NewLinkPair()
 		Expect(linkErr).To(BeNil())
-		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, "192.168.0.1/24").Build()
+
+		ns1Address, addrErr := netlink.ParseAddr("192.168.0.1/24")
+		Expect(addrErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, ns1Address).Build()
 		Expect(err).To(BeNil())
-		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "192.168.0.2/24").Build()
+
+		ns2Address, addrErr := netlink.ParseAddr("192.168.0.2/24")
+		Expect(addrErr).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, ns2Address).Build()
 		Expect(err).To(BeNil())
 	})
 
@@ -283,9 +290,15 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 	BeforeEach(func() {
 		mainLink, peerLink, linkErr := netns.NewLinkPair()
 		Expect(linkErr).To(BeNil())
-		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, "fd00:0:0:c0a8:1/64").WithIPv6(true).Build()
+
+		ns1Address, addrErr := netlink.ParseAddr("::ffff:c0a8:1/64")
+		Expect(addrErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(mainLink, ns1Address).Build()
 		Expect(err).To(BeNil())
-		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "fd00:0:0:c0a8:2/64").WithIPv6(true).Build()
+
+		ns2Address, addrErr := netlink.ParseAddr("::ffff:c0a8:2/64")
+		Expect(addrErr).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(peerLink, ns2Address).Build()
 		Expect(err).To(BeNil())
 	})
 

@@ -448,9 +448,9 @@ func (b *Builder) Build() (*NetNS, error) {
 	return ns, <-done
 }
 
-func (b *Builder) WithSharedLink(link netlink.Link, linkAddress string) *Builder {
+func (b *Builder) WithSharedLink(link netlink.Link, linkAddress *netlink.Addr) *Builder {
 	b.sharedLink = &link
-	b.sharedLinkAddress, _ = netlink.ParseAddr(linkAddress)
+	b.sharedLinkAddress = linkAddress
 	return b
 }
 

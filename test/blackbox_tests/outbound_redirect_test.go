@@ -243,10 +243,8 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 
 			// then
 			Eventually(ns.UnsafeExec(func() {
-				reply, err := tcp.DialIPWithPortAndGetReply(ns2.SharedLinkAddress().IP, excludedPort)
-				fmt.Printf("** reply from excluded port %d %s", excludedPort, reply)
-				Expect(err).To(Not(HaveOccurred()))
-				Expect(reply).To(Equal("excluded"))
+				Expect(tcp.DialIPWithPortAndGetReply(ns2.SharedLinkAddress().IP, excludedPort)).
+					To(Equal("excluded"))
 			})).Should(BeClosed())
 
 			// then
@@ -280,14 +278,20 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded ones", func() {
 	var err error
 	var ns *netns.NetNS
+	var ns2 *netns.NetNS
 
 	BeforeEach(func() {
-		ns, err = netns.NewNetNSBuilder().WithIPv6(true).Build()
+		mainLink, peerLink, linkErr := netns.NewLinkPair()
+		Expect(linkErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, "::ffff:c0a8:1/64").Build()
+		Expect(err).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "::ffff:c0a8:1/64").Build()
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
 		Expect(ns.Cleanup()).To(Succeed())
+		Expect(ns2.Cleanup()).To(Succeed())
 	})
 
 	DescribeTable("should be redirected to outbound port",
@@ -296,8 +300,9 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Outbound: config.TrafficFlow{
-						Enabled: true,
-						Port:    serverPort,
+						Enabled:      true,
+						Port:         serverPort,
+						ExcludePorts: []uint16{excludedPort},
 					},
 					Inbound: config.TrafficFlow{
 						Enabled: true,
@@ -340,7 +345,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 
 			// then
 			Eventually(ns.UnsafeExec(func() {
-				Expect(tcp.DialIPWithPortAndGetReply(net.IPv6zero, excludedPort)).
+				Expect(tcp.DialIPWithPortAndGetReply(ns2.SharedLinkAddress().IP, excludedPort)).
 					To(Equal("excluded"))
 			})).Should(BeClosed())
 

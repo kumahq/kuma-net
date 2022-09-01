@@ -36,7 +36,7 @@ func NewLinkPair() (netlink.Link, netlink.Link, error) {
 	veth := newVeth("shared-", suffixA, suffixB)
 	err = netlink.LinkAdd(veth)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot add link: %s, suffixA %d, suffixB %d,", err, suffixA, suffixB)
+		return nil, nil, fmt.Errorf("cannot add link: %s, suffixA %d, suffixB %d", err, suffixA, suffixB)
 	}
 	mainLink, err := netlink.LinkByName(veth.Name)
 	if err != nil {
@@ -105,7 +105,7 @@ func genSuffixes() (uint8, uint8, error) {
 		return 0, 0, fmt.Errorf("cannot get network interface addresses: %s", err)
 	}
 
-	for i := uint8(1); i < math.MaxUint8; i++ {
+	for i := uint8(1); i < 100; i++ {
 		var s map[uint8]struct{}
 		var ok bool
 
@@ -125,7 +125,7 @@ func genSuffixes() (uint8, uint8, error) {
 			return i, 1, nil
 		}
 
-		for j := uint8(1); j < math.MaxUint8; j++ {
+		for j := uint8(1); j < 100; j++ {
 			if _, ok := s[j]; !ok {
 				s[j] = struct{}{}
 

@@ -123,7 +123,7 @@ kind/deploy/iptables: helm/add/kuma
 	make kind/deploy/kuma/wait
 
 run/perf:
-	CLUSTER_IP=$(KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) get services/http-echo -n kuma-demo -o go-template='{{(.spec.clusterIP)}}') && \
+	CLUSTER_IP=$(KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) get services/http-echo -n kuma-perf -o go-template='{{(.spec.clusterIP)}}') && \
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) exec -it deployment/wrk -n kuma-perf -c wrk -- wrk -c$(WRK_CONN) -t$(WRK_THREAD) -d$(WRK_DURATION)s --latency http://$(CLUSTER_IP):5000/
 
 helm/add/kuma:

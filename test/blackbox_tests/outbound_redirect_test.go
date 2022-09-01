@@ -175,7 +175,7 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 	)
 })
 
-var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded ones", func() {
+var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded ones", func() {
 	var err error
 	var ns *netns.NetNS
 
@@ -195,15 +195,15 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 			tproxyConfig := config.Config{
 				Redirect: config.Redirect{
 					Outbound: config.TrafficFlow{
-						Enabled:      true,
-						Port:         serverPort,
-						ExcludePorts: []uint16{excludedPort},
+						Enabled: true,
+						Port:    serverPort,
+						//ExcludePorts: []uint16{excludedPort},
 					},
 					Inbound: config.TrafficFlow{
 						Enabled: true,
 					},
 				},
-				RuntimeStdout: ioutil.Discard,
+				//RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -239,8 +239,10 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 
 			// then
 			Eventually(ns.UnsafeExec(func() {
-				Expect(tcp.DialIPWithPortAndGetReply(net.IPv4zero, excludedPort)).
-					To(Equal("excluded"))
+				reply, err := tcp.DialIPWithPortAndGetReply(net.IPv4zero, excludedPort)
+				fmt.Printf("** reply from excluded port %d %s", excludedPort, reply)
+				Expect(err).To(Not(HaveOccurred()))
+				Expect(reply).To(Equal("excluded"))
 			})).Should(BeClosed())
 
 			// then

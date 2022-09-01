@@ -15,9 +15,9 @@ KUBECTL_VERSION ?= v1.23.5
 KUMA_VERSION ?= 1.8.0
 
 # wrk test configuration
-WRK_CONN := 100
-WRK_THREAD := 12
-WRK_DURATION := 60
+WRK_CONN ?= 100
+WRK_THREAD ?= 12
+WRK_DURATION ?= 60
 export PATH := $(TOOLS_DIR):$(PATH)
 CONFIG_PATH := single-node
 ifdef USE_MULTI_NODE
@@ -26,12 +26,12 @@ endif
 
 UNAME_OS := $(shell uname -s)
 UNAME_ARCH := $(shell uname -m)
-ARCH := UNAME_ARCH
+ARCH ?= UNAME_ARCH
 ifeq ($(UNAME_ARCH),x86_64)
 	ARCH = amd64
 endif
 
-OS := UNAME_OS
+OS ?= UNAME_OS
 ifeq ($(UNAME_OS),Linux)
 	OS = linux
 else ifeq ($(UNAME_OS),Darwin)
@@ -125,7 +125,7 @@ kind/deploy/iptables: helm/add/kuma
 run/perf:
 	CLUSTER_IP=$(shell KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) get services/http-echo -n kuma-perf -o jsonpath="{.spec.clusterIP}"); \
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) exec -it deployment/wrk -n kuma-perf -c wrk -- wrk -c$(WRK_CONN) -t$(WRK_THREAD) -d$(WRK_DURATION)s --latency http://$${CLUSTER_IP}:5000/
-	
+
 helm/add/kuma:
 	$(HELM_PATH) repo add kuma https://kumahq.github.io/charts && \
 	$(HELM_PATH) repo update

@@ -12,7 +12,6 @@ import (
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/vishvananda/netlink"
 	"io/ioutil"
 	"net"
 )
@@ -174,22 +173,17 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port", func() {
 	)
 })
 
-var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded ones", func() {
+var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded ones", func() {
 	var err error
 	var ns *netns.NetNS
 	var ns2 *netns.NetNS
 
 	BeforeEach(func() {
-		veth := netns.NewVeth("shared-", 1, 2)
-		Expect(netlink.LinkAdd(veth)).To(Succeed())
-		mainLink, err2 := netlink.LinkByName(veth.Name)
-		Expect(err2).To(BeNil())
-		peerLink, err2 := netlink.LinkByName(veth.PeerName)
-		Expect(err2).To(BeNil())
-
-		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink).WithLinkAddress("10.255.0.1/24").Build()
+		mainLink, peerLink, linkErr := netns.NewLinkPair()
+		Expect(linkErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, "192.168.0.1/24").Build()
 		Expect(err).To(BeNil())
-		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink).WithLinkAddress("10.255.0.2/24").Build()
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, "192.168.0.2/24").Build()
 		Expect(err).To(BeNil())
 	})
 
@@ -213,8 +207,7 @@ var _ = FDescribe("Outbound IPv4 TCP traffic to any address:port except excluded
 						Enabled: true,
 					},
 				},
-				//RuntimeStdout: ioutil.Discard,
-				Verbose: true,
+				RuntimeStdout: ioutil.Discard,
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(

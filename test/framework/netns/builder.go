@@ -105,7 +105,7 @@ func genSuffixes() (uint8, uint8, error) {
 		return 0, 0, fmt.Errorf("cannot get network interface addresses: %s", err)
 	}
 
-	for i := uint8(1); i < 100; i++ {
+	for i := uint8(1); i < math.MaxUint8; i++ {
 		var s map[uint8]struct{}
 		var ok bool
 
@@ -125,7 +125,7 @@ func genSuffixes() (uint8, uint8, error) {
 			return i, 1, nil
 		}
 
-		for j := uint8(1); j < 100; j++ {
+		for j := uint8(1); j < math.MaxUint8; j++ {
 			if _, ok := s[j]; !ok {
 				s[j] = struct{}{}
 

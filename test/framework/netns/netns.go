@@ -19,11 +19,12 @@ import (
 // CLONE_NEWNET requires Linux Kernel 3.0+
 
 type NetNS struct {
-	name            string
-	ns              netns.NsHandle
-	originalNS      netns.NsHandle
-	veth            *Veth
-	beforeExecFuncs []func() error
+	name              string
+	ns                netns.NsHandle
+	originalNS        netns.NsHandle
+	veth              *Veth
+	beforeExecFuncs   []func() error
+	sharedLinkAddress *netlink.Addr
 }
 
 func (ns *NetNS) Name() string {
@@ -154,4 +155,8 @@ func (ns *NetNS) Cleanup() error {
 	}()
 
 	return <-done
+}
+
+func (ns *NetNS) SharedLinkAddress() *netlink.Addr {
+	return ns.sharedLinkAddress
 }

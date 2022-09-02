@@ -27,6 +27,29 @@ func newVeth(nameSeed string, suffixA, suffixB uint8) *netlink.Veth {
 	}
 }
 
+func NewLinkPair() (netlink.Link, netlink.Link, error) {
+	suffixA, suffixB, err := genSuffixes()
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot generate suffixes: %s", err)
+	}
+
+	veth := newVeth("s-", suffixA, suffixB)
+	err = netlink.LinkAdd(veth)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot add link: %s, suffixA %d, suffixB %d", err, suffixA, suffixB)
+	}
+	mainLink, err := netlink.LinkByName(veth.Name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot link mainLink by name: %s", err)
+	}
+	peerLink, err := netlink.LinkByName(veth.PeerName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot link peerLink by name: %s", err)
+	}
+
+	return mainLink, peerLink, err
+}
+
 type Builder struct {
 	nameSeed string
 	ipv6     bool
@@ -37,7 +60,9 @@ type Builder struct {
 	// (equivalent of `echo "32768   32770" > /proc/sys/net/ipv4/ip_local_port_range`).
 	// By doing so we have to remember that this change is ephemeral and will be
 	// applied only for the locked goroutine which it was invoked from
-	beforeExecFuncs []func() error
+	beforeExecFuncs   []func() error
+	sharedLink        *netlink.Link
+	sharedLinkAddress *netlink.Addr
 }
 
 func (b *Builder) WithNameSeed(seed string) *Builder {
@@ -281,6 +306,12 @@ func (b *Builder) Build() (*NetNS, error) {
 			done <- fmt.Errorf("cannot switch to original network namespace: %s", err)
 		}
 
+		if b.sharedLink != nil {
+			if err := netlink.LinkSetNsFd(*b.sharedLink, int(newNS)); err != nil {
+				done <- fmt.Errorf("cannot put peer shared link inside new network interface: %s", err)
+			}
+		}
+
 		// Adding an interface to a network namespace will cause the interface
 		// to lose its existing IP address, so we cannot assign it earlier.
 		if err := netlink.LinkSetNsFd(peerLink, int(newNS)); err != nil {
@@ -293,6 +324,16 @@ func (b *Builder) Build() (*NetNS, error) {
 
 		if err := netlink.AddrAdd(peerLink, peerAddr); err != nil {
 			done <- fmt.Errorf("cannot add address to peer veth interface: %s", err)
+		}
+
+		if b.sharedLink != nil && b.sharedLinkAddress != nil {
+			if err := netlink.LinkSetUp(*b.sharedLink); err != nil {
+				done <- fmt.Errorf("cannot set shared link interface up: %s", err)
+			}
+
+			if err := netlink.AddrAdd(*b.sharedLink, b.sharedLinkAddress); err != nil {
+				done <- fmt.Errorf("cannot add address %s to link %s interface: %s", b.sharedLinkAddress.String(), *(b.sharedLink), err)
+			}
 		}
 
 		// I tried to mitigate the problem with IPv6 2s delay (described before
@@ -334,7 +375,8 @@ func (b *Builder) Build() (*NetNS, error) {
 				ipNet:     mainIPNet,
 				peerIPNet: peerIPNet,
 			},
-			beforeExecFuncs: b.beforeExecFuncs,
+			sharedLinkAddress: b.sharedLinkAddress,
+			beforeExecFuncs:   b.beforeExecFuncs,
 		}
 
 		// When configuring network namespace with IPv6 addresses, on some
@@ -405,6 +447,12 @@ func (b *Builder) Build() (*NetNS, error) {
 	}()
 
 	return ns, <-done
+}
+
+func (b *Builder) WithSharedLink(link netlink.Link, linkAddress *netlink.Addr) *Builder {
+	b.sharedLink = &link
+	b.sharedLinkAddress = linkAddress
+	return b
 }
 
 func NewNetNSBuilder() *Builder {

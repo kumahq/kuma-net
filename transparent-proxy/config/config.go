@@ -125,7 +125,7 @@ func (c Config) ShouldConntrackZoneSplit() bool {
 	// skip conntrack related rules and move forward
 	if err := exec.Command("iptables", "-m", "conntrack", "--help").Run(); err != nil {
 		_, _ = fmt.Fprintf(c.RuntimeStdout,
-			"[WARNING] error occured when validating if 'conntrack' iptables "+
+			"[WARNING] error occurred when validating if 'conntrack' iptables "+
 				"module is present. Rules for DNS conntrack zone "+
 				"splitting won't be applied: %s\n", err,
 		)

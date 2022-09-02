@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vishvananda/netlink"
+
 	"github.com/kumahq/kuma-net/iptables/table"
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
-	"github.com/vishvananda/netlink"
 )
 
 type IPTables struct {
@@ -67,9 +68,14 @@ func BuildIPTables(cfg config.Config, dnsServers []string, ipv6 bool) (string, e
 		return "", fmt.Errorf("cannot obtain loopback interface: %s", err)
 	}
 
+	natTable, err := buildNatTable(cfg, dnsServers, loopbackIface.Name, ipv6)
+	if err != nil {
+		return "", fmt.Errorf("build nat table: %s", err)
+	}
+
 	return newIPTables(
 		buildRawTable(cfg, dnsServers),
-		buildNatTable(cfg, dnsServers, loopbackIface.Name, ipv6),
+		natTable,
 		buildMangleTable(cfg),
 	).Build(cfg.Verbose), nil
 }

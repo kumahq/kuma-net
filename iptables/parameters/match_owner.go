@@ -17,6 +17,7 @@ package parameters
 
 import (
 	"fmt"
+
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 

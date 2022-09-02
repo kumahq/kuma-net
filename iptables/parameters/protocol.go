@@ -1,9 +1,10 @@
 package parameters
 
 import (
-	"github.com/kumahq/kuma-net/transparent-proxy/config"
 	"strconv"
 	"strings"
+
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 type ProtocolParameter struct {

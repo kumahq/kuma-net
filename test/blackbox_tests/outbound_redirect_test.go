@@ -320,8 +320,9 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except ports exc
 						Enabled: true,
 						Port:    serverPort,
 						ExcludePortsForUIDs: []config.UIDsToPorts{{
-							UIDs:  config.ValueOrRangeList(strconv.Itoa(int(dnsUserUid))),
-							Ports: config.ValueOrRangeList(strconv.Itoa(int(excludedPort))),
+							UIDs:     config.ValueOrRangeList(strconv.Itoa(int(dnsUserUid))),
+							Ports:    config.ValueOrRangeList(strconv.Itoa(int(excludedPort))),
+							Protocol: "tcp",
 						}},
 					},
 					Inbound: config.TrafficFlow{
@@ -886,8 +887,9 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except ports exc
 						Enabled: true,
 						Port:    serverPort,
 						ExcludePortsForUIDs: []config.UIDsToPorts{{
-							UIDs:  config.ValueOrRangeList(strconv.Itoa(int(dnsUserUid))),
-							Ports: config.ValueOrRangeList(strconv.Itoa(int(excludedPort))),
+							UIDs:     config.ValueOrRangeList(strconv.Itoa(int(dnsUserUid))),
+							Ports:    config.ValueOrRangeList(strconv.Itoa(int(excludedPort))),
+							Protocol: "tcp",
 						}},
 					},
 					Inbound: config.TrafficFlow{

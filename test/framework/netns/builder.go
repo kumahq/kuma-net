@@ -33,7 +33,7 @@ func NewLinkPair() (netlink.Link, netlink.Link, error) {
 		return nil, nil, fmt.Errorf("cannot generate suffixes: %s", err)
 	}
 
-	veth := newVeth("shared-", suffixA, suffixB)
+	veth := newVeth("s-", suffixA, suffixB)
 	err = netlink.LinkAdd(veth)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot add link: %s, suffixA %d, suffixB %d", err, suffixA, suffixB)

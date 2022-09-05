@@ -167,7 +167,7 @@ var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53", func() {
 		},
 		func() []TableEntry {
 			var entries []TableEntry
-			lockedPorts := []uint16{uint16(consts.DNSPort)}
+			lockedPorts := []uint16{consts.DNSPort}
 
 			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
 				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)

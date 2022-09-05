@@ -192,6 +192,26 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
 
+	// Excluded outbound ports for UIDs
+	for _, uIDsToPorts := range cfg.Redirect.Outbound.ExcludePortsForUIDs {
+		var protocol *Parameter
+
+		switch uIDsToPorts.Protocol {
+		case "tcp":
+			protocol = Protocol(Tcp(DestinationPortRangeOrValue(uIDsToPorts)))
+		case "udp":
+			protocol = Protocol(Udp(DestinationPortRangeOrValue(uIDsToPorts)))
+		default:
+			return fmt.Errorf("unknown protocol %s, only 'tcp' or 'udp' allowed", uIDsToPorts.Protocol)
+		}
+
+		nat.Output().Append(
+			protocol,
+			Match(Owner(UidRangeOrValue(uIDsToPorts))),
+			Jump(Return()),
+		)
+	}
+
 	if cfg.ShouldRedirectDNS() {
 		nat.Output().Append(
 			Protocol(Udp(DestinationPort(DNSPort))),
@@ -212,25 +232,6 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 				)
 			}
 		}
-	}
-	// Excluded outbound ports for UIDs
-	for _, uIDsToPorts := range cfg.Redirect.Outbound.ExcludePortsForUIDs {
-		var protocol *Parameter
-
-		switch uIDsToPorts.Protocol {
-		case "tcp":
-			protocol = Protocol(Tcp(DestinationPortRangeOrValue(uIDsToPorts)))
-		case "udp":
-			protocol = Protocol(Udp(DestinationPortRangeOrValue(uIDsToPorts)))
-		default:
-			return fmt.Errorf("Unknown protocol %s, only 'tcp' or 'udp' allowed", uIDsToPorts.Protocol)
-		}
-
-		nat.Output().Append(
-			protocol,
-			Match(Owner(UidRangeOrValue(uIDsToPorts))),
-			Jump(Return()),
-		)
 	}
 	nat.Output().
 		Append(

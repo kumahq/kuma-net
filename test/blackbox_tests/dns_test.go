@@ -95,6 +95,95 @@ var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53", func() {
 	)
 })
 
+var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53", func() {
+	var err error
+	var ns *netns.NetNS
+
+	BeforeEach(func() {
+		ns, err = netns.NewNetNSBuilder().Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to provided port except for traffic excluded by uid",
+		func(randomPort uint16) {
+			dnsUserUid := uintptr(4201) // see /.github/workflows/tests.yaml:76
+			// given
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					DNS: config.DNS{
+						Enabled:    true,
+						Port:       randomPort,
+						CaptureAll: true,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+						ExcludePortsForUIDs: []config.UIDsToPorts{{
+							UIDs:     config.ValueOrRangeList(strconv.Itoa(int(dnsUserUid))),
+							Ports:    config.ValueOrRangeList(strconv.Itoa(int(consts.DNSPort))),
+							Protocol: "udp",
+						}},
+					},
+				},
+				RuntimeStdout: ioutil.Discard,
+			}
+			originalAddress := &net.UDPAddr{IP: net.ParseIP(consts.LocalhostIPv4), Port: int(consts.DNSPort)}
+			redirectedToAddress := fmt.Sprintf("%s:%d", consts.LocalhostIPv4, randomPort)
+
+			redirectedC, redirectedErr := udp.UnsafeStartUDPServer(ns, redirectedToAddress, udp.ReplyWithReceivedMsg)
+			Consistently(redirectedErr).ShouldNot(Receive())
+			Eventually(redirectedC).Should(BeClosed())
+
+			originalC, originalErr := udp.UnsafeStartUDPServer(ns, originalAddress.String(), udp.ReplyWithMsg("excluded"))
+			Consistently(originalErr).ShouldNot(Receive())
+			Eventually(originalC).Should(BeClosed())
+
+			// when
+			Eventually(ns.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// and
+			Eventually(ns.UnsafeExec(func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(originalAddress, originalAddress)).
+					To(Equal(originalAddress.String()))
+			})).Should(BeClosed())
+
+			// and
+			Eventually(ns.UnsafeExecInLoop(1, 0, func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(originalAddress, originalAddress)).
+					To(Equal("excluded"))
+			}, syscall.SetUID(dnsUserUid))).Should(BeClosed())
+
+			// then
+			Consistently(redirectedErr).ShouldNot(Receive())
+			Consistently(originalErr).ShouldNot(Receive())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			lockedPorts := []uint16{uint16(consts.DNSPort)}
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
+				entry := Entry(EntryDescription(desc), randomPorts[0])
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
 var _ = Describe("Outbound IPv4 DNS/TCP traffic to port 53", func() {
 	var err error
 	var ns *netns.NetNS

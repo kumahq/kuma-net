@@ -11,15 +11,29 @@ type Owner struct {
 	UID string
 }
 
+// ValueOrRangeList is a format acceptable by iptables in which
+// single values are denoted by just a number e.g. 1000
+// multiple values (lists) are denoted by a number separated by a comma e.g. 1000,1001
+// ranges are denoted by a colon e.g. 1000:1003 meaning 1000,1001,1002,1003
+// ranges and multiple values can be mixed e.g. 1000,1005:1006 meaning 1000,1005,1006
+type ValueOrRangeList string
+
+type UIDsToPorts struct {
+	Protocol string
+	UIDs     ValueOrRangeList
+	Ports    ValueOrRangeList
+}
+
 // TrafficFlow is a struct for Inbound/Outbound configuration
 type TrafficFlow struct {
-	Enabled       bool
-	Port          uint16
-	PortIPv6      uint16
-	Chain         Chain
-	RedirectChain Chain
-	ExcludePorts  []uint16
-	IncludePorts  []uint16
+	Enabled             bool
+	Port                uint16
+	PortIPv6            uint16
+	Chain               Chain
+	RedirectChain       Chain
+	ExcludePorts        []uint16
+	ExcludePortsForUIDs []UIDsToPorts
+	IncludePorts        []uint16
 }
 
 type DNS struct {
@@ -111,7 +125,7 @@ func (c Config) ShouldConntrackZoneSplit() bool {
 	// skip conntrack related rules and move forward
 	if err := exec.Command("iptables", "-m", "conntrack", "--help").Run(); err != nil {
 		_, _ = fmt.Fprintf(c.RuntimeStdout,
-			"[WARNING] error occured when validating if 'conntrack' iptables "+
+			"[WARNING] error occurred when validating if 'conntrack' iptables "+
 				"module is present. Rules for DNS conntrack zone "+
 				"splitting won't be applied: %s\n", err,
 		)
@@ -225,6 +239,10 @@ func MergeConfigWithDefaults(cfg Config) Config {
 
 	if len(cfg.Redirect.Outbound.IncludePorts) > 0 {
 		result.Redirect.Outbound.IncludePorts = cfg.Redirect.Outbound.IncludePorts
+	}
+
+	if len(cfg.Redirect.Outbound.ExcludePortsForUIDs) > 0 {
+		result.Redirect.Outbound.ExcludePortsForUIDs = cfg.Redirect.Outbound.ExcludePortsForUIDs
 	}
 
 	// .Redirect.DNS

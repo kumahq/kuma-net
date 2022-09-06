@@ -1,6 +1,8 @@
 package builder
 
 import (
+	"fmt"
+
 	. "github.com/kumahq/kuma-net/iptables/chain"
 	. "github.com/kumahq/kuma-net/iptables/consts"
 	. "github.com/kumahq/kuma-net/iptables/parameters"
@@ -185,10 +187,30 @@ func buildMeshRedirect(cfg config.TrafficFlow, prefix string, ipv6 bool) *Chain 
 		)
 }
 
-func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable) {
+func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable) error {
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(cfg.Redirect.NamePrefix)
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
+
+	// Excluded outbound ports for UIDs
+	for _, uIDsToPorts := range cfg.Redirect.Outbound.ExcludePortsForUIDs {
+		var protocol *Parameter
+
+		switch uIDsToPorts.Protocol {
+		case TCP:
+			protocol = Protocol(Tcp(DestinationPortRangeOrValue(uIDsToPorts)))
+		case UDP:
+			protocol = Protocol(Udp(DestinationPortRangeOrValue(uIDsToPorts)))
+		default:
+			return fmt.Errorf("unknown protocol %s, only 'tcp' or 'udp' allowed", uIDsToPorts.Protocol)
+		}
+
+		nat.Output().Append(
+			protocol,
+			Match(Owner(UidRangeOrValue(uIDsToPorts))),
+			Jump(Return()),
+		)
+	}
 
 	if cfg.ShouldRedirectDNS() {
 		nat.Output().Append(
@@ -216,6 +238,7 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 			Protocol(Tcp()),
 			Jump(ToUserDefinedChain(outboundChainName)),
 		)
+	return nil
 }
 
 func buildNatTable(
@@ -223,7 +246,7 @@ func buildNatTable(
 	dnsServers []string,
 	loopback string,
 	ipv6 bool,
-) *table.NatTable {
+) (*table.NatTable, error) {
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
@@ -234,7 +257,9 @@ func buildNatTable(
 		Jump(ToUserDefinedChain(inboundChainName)),
 	)
 
-	addOutputRules(cfg, dnsServers, nat)
+	if err := addOutputRules(cfg, dnsServers, nat); err != nil {
+		return nil, fmt.Errorf("could not add output rules %s", err)
+	}
 
 	// MESH_INBOUND
 	meshInbound := buildMeshInbound(cfg.Redirect.Inbound, prefix, inboundRedirectChainName)
@@ -252,5 +277,5 @@ func buildNatTable(
 		WithChain(meshInbound).
 		WithChain(meshOutbound).
 		WithChain(meshInboundRedirect).
-		WithChain(meshOutboundRedirect)
+		WithChain(meshOutboundRedirect), nil
 }

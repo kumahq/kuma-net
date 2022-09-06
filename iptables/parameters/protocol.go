@@ -77,20 +77,16 @@ func destinationPort(port uint16, negative bool) *TcpUdpParameter {
 	}
 }
 
-func destinationPortRangeOrValue(uIDsToPorts config.UIDsToPorts) *TcpUdpParameter {
-	return &TcpUdpParameter{
-		long:  "--destination-port",
-		short: "--dport",
-		value: string(uIDsToPorts.Ports),
-	}
-}
-
 func DestinationPort(port uint16) *TcpUdpParameter {
 	return destinationPort(port, false)
 }
 
 func DestinationPortRangeOrValue(uIDsToPorts config.UIDsToPorts) *TcpUdpParameter {
-	return destinationPortRangeOrValue(uIDsToPorts)
+	return &TcpUdpParameter{
+		long:  "--destination-port",
+		short: "--dport",
+		value: string(uIDsToPorts.Ports),
+	}
 }
 
 func NotDestinationPort(port uint16) *TcpUdpParameter {

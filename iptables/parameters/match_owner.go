@@ -49,13 +49,6 @@ func uid(id string, negative bool) *OwnerParameter {
 	}
 }
 
-func uidRangeOrValue(uIDsToPorts config.UIDsToPorts) *OwnerParameter {
-	return &OwnerParameter{
-		flag:  "--uid-owner",
-		value: string(uIDsToPorts.UIDs),
-	}
-}
-
 // Uid matches if the packet socket's file structure (if it has one) is owned by the user
 // with given UID
 func Uid(id string) *OwnerParameter {
@@ -65,7 +58,10 @@ func Uid(id string) *OwnerParameter {
 // UidRangeOrValue matches if the packet socket's file structure (if it has one) is owned by the user
 // with given list of UID values or ranges
 func UidRangeOrValue(uIDsToPorts config.UIDsToPorts) *OwnerParameter {
-	return uidRangeOrValue(uIDsToPorts)
+	return &OwnerParameter{
+		flag:  "--uid-owner",
+		value: string(uIDsToPorts.UIDs),
+	}
 }
 
 func NotUid(id string) *OwnerParameter {

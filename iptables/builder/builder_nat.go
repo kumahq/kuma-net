@@ -197,9 +197,9 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 		var protocol *Parameter
 
 		switch uIDsToPorts.Protocol {
-		case "tcp":
+		case TCP:
 			protocol = Protocol(Tcp(DestinationPortRangeOrValue(uIDsToPorts)))
-		case "udp":
+		case UDP:
 			protocol = Protocol(Udp(DestinationPortRangeOrValue(uIDsToPorts)))
 		default:
 			return fmt.Errorf("unknown protocol %s, only 'tcp' or 'udp' allowed", uIDsToPorts.Protocol)

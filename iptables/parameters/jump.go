@@ -44,3 +44,13 @@ func Return() *JumpParameter {
 func Drop() *JumpParameter {
 	return &JumpParameter{parameters: []string{"DROP"}}
 }
+
+func Log(prefix string, level uint16) *JumpParameter {
+	return &JumpParameter{
+		parameters: []string{
+			"LOG",
+			"--log-prefix", prefix,
+			"--log-level", strconv.Itoa(int(level)),
+		},
+	}
+}

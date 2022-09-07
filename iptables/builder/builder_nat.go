@@ -191,6 +191,11 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(cfg.Redirect.NamePrefix)
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
+	if cfg.Log.Enabled {
+		nat.Output().Append(
+			Jump(Log(OutputLogPrefix, cfg.Log.Level)),
+		)
+	}
 
 	// Excluded outbound ports for UIDs
 	for _, uIDsToPorts := range cfg.Redirect.Outbound.ExcludePortsForUIDs {
@@ -252,6 +257,11 @@ func buildNatTable(
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
 	nat := table.Nat()
 
+	if cfg.Log.Enabled {
+		nat.Prerouting().Append(
+			Jump(Log(PreroutingLogPrefix, cfg.Log.Level)),
+		)
+	}
 	nat.Prerouting().Append(
 		Protocol(Tcp()),
 		Jump(ToUserDefinedChain(inboundChainName)),

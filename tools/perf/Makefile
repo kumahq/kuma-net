@@ -1,14 +1,14 @@
 TOP := $(shell pwd)
-TOOLS_DIR = $(HOME)/bin
+TOOLS_DIR = $(HOME)/.kuma-perf-dev
 CURL_PATH ?= curl
 CURL_DOWNLOAD := $(CURL_PATH) --location --fail --progress-bar
 
 KIND_CLUSTER_NAME ?= kuma
 KIND_KUBECONFIG_DIR := $(HOME)/.kube
 KIND_KUBECONFIG := $(KIND_KUBECONFIG_DIR)/kind-$(KIND_CLUSTER_NAME)-config
-HELM_PATH := $(TOOLS_DIR)/helm
-KIND_PATH := $(TOOLS_DIR)/kind
-KUBECTL_PATH := $(TOOLS_DIR)/kubectl
+HELM_PATH ?= $(TOOLS_DIR)/helm
+KIND_PATH ?= $(TOOLS_DIR)/kind
+KUBECTL_PATH ?= $(TOOLS_DIR)/kubectl
 HELM_VERSION ?= v3.8.2
 KIND_VERSION ?= v0.14.0
 KUBECTL_VERSION ?= v1.23.5

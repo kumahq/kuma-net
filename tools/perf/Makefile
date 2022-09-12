@@ -26,12 +26,12 @@ endif
 
 UNAME_OS := $(shell uname -s)
 UNAME_ARCH := $(shell uname -m)
-ARCH ?= UNAME_ARCH
+ARCH ?= $(UNAME_ARCH)
 ifeq ($(UNAME_ARCH),x86_64)
 	ARCH = amd64
-endif
+endif 
 
-OS ?= UNAME_OS
+OS ?= $(UNAME_OS)
 ifeq ($(UNAME_OS),Linux)
 	OS = linux
 else ifeq ($(UNAME_OS),Darwin)

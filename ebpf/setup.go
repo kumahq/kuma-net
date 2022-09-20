@@ -43,25 +43,28 @@ var programs = []*Program{
 	},
 	{
 		Name: "mb_tc",
-		Flags: func() ([]string, error) {
+		Flags: func(verbose bool) ([]string, error) {
 			if iface, err := getNonLoopbackInterface(); err != nil {
 				return nil, fmt.Errorf("getting non-loopback interface failed: %v", err)
 			} else {
 				return flags(map[string]string{
 					"--iface": iface.Name,
-				})()
+				})(verbose)
 			}
 		},
 	},
 }
 
-func flags(flags map[string]string) func() ([]string, error) {
+func flags(flags map[string]string) func(bool) ([]string, error) {
 	f := map[string]string{
-		"--bpffs":   BpfFSPath,
-		"--verbose": "",
+		"--bpffs": BpfFSPath,
 	}
 
-	return func() ([]string, error) {
+	return func(verbose bool) ([]string, error) {
+		if verbose {
+			f["--verbose"] = ""
+		}
+
 		if flags == nil {
 			return mapFlagsToSlice(f), nil
 		}
@@ -74,7 +77,7 @@ func flags(flags map[string]string) func() ([]string, error) {
 	}
 }
 
-func cgroupFlags() func() ([]string, error) {
+func cgroupFlags() func(bool) ([]string, error) {
 	return flags(map[string]string{
 		"--cgroup": CgroupPath,
 	})

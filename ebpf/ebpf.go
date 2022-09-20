@@ -44,7 +44,7 @@ const MaxItemLen = 10
 // is pinned, it's hardcoded as "{BPFFS_path}/tc/globals/local_pod_ips" because
 // merbridge is hard-coding it as well, and we don't want to allot to change it
 // by mistake
-const LocalPodIPSPinnedMapPathRelativeToBPFFS = "/tc/globals/local_pod_ips"
+const LocalPodIPSPinnedMapPathRelativeToBPFFS = "/local_pod_ips"
 const MarkPodIPSPinnedMapPathRelativeToBPFFS = "/mark_pod_ips"
 
 type Cidr struct {
@@ -66,7 +66,7 @@ type PodConfig struct {
 
 type Program struct {
 	Name  string
-	Flags func() ([]string, error)
+	Flags func(verbose bool) ([]string, error)
 }
 
 func ipStrToPtr(ipstr string) (unsafe.Pointer, error) {
@@ -128,7 +128,7 @@ func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
 	var errs []string
 
 	for _, p := range programs {
-		flags, err := p.Flags()
+		flags, err := p.Flags(cfg.Verbose)
 		if err != nil {
 			errs = append(errs, err.Error())
 			continue
@@ -177,10 +177,6 @@ func InitBPFFSMaybe(fsPath string) error {
 
 	if err := unix.Mount("bpf", fsPath, "bpf", 0, ""); err != nil {
 		return fmt.Errorf("mounting BPF file system failed: %v", err)
-	}
-
-	if err := os.MkdirAll(path.Join(fsPath, "tc", "globals"), 0750); err != nil {
-		return fmt.Errorf("making directory for tc globals pinning failed: %v", err)
 	}
 
 	return nil

@@ -45,6 +45,7 @@ const MaxItemLen = 10
 // merbridge is hard-coding it as well, and we don't want to allot to change it
 // by mistake
 const LocalPodIPSPinnedMapPathRelativeToBPFFS = "/tc/globals/local_pod_ips"
+const MarkPodIPSPinnedMapPathRelativeToBPFFS = "/mark_pod_ips"
 
 type Cidr struct {
 	Net  uint32 // network order
@@ -64,18 +65,23 @@ type PodConfig struct {
 }
 
 type Program struct {
-	PinName          string
-	MakeLoadTarget   string
-	MakeAttachTarget string
+	Name  string
+	Flags func() ([]string, error)
 }
 
-func ipStrToUint32(ipstr string) (uint32, error) {
-	ip := net.ParseIP(ipstr)
-	if ip == nil {
-		return 0, fmt.Errorf("error when parsing ip string: %s", ipstr)
+func ipStrToPtr(ipstr string) (unsafe.Pointer, error) {
+	var ip net.IP
+
+	if ip = net.ParseIP(ipstr); ip == nil {
+		return nil, fmt.Errorf("error parse ip: %s", ipstr)
+	} else if ip.To4() != nil {
+		// ipv4, we need to clear the bytes
+		for i := 0; i < 12; i++ {
+			ip[i] = 0
+		}
 	}
 
-	return *(*uint32)(unsafe.Pointer(&ip[12])), nil
+	return unsafe.Pointer(&ip[0]), nil
 }
 
 func run(cmdToExec string, args, envVars []string, stdout, stderr io.Writer) error {
@@ -118,40 +124,30 @@ func isDirEmpty(dirPath string) (bool, error) {
 	return true, nil
 }
 
-func runMake(target string, cfg config.Config) error {
-	args := []string{"--directory", cfg.Ebpf.ProgramsSourcePath, target}
-	envVars := []string{
-		"MESH_MODE=kuma",
-		"USE_RECONNECT=1",
-		"DEBUG=1",
-		"PROG_MOUNT_PATH=" + cfg.Ebpf.BPFFSPath,
-	}
-
-	return run("make", args, envVars, cfg.RuntimeStdout, cfg.RuntimeStderr)
-}
-
 func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
 	var errs []string
 
 	for _, p := range programs {
-		if _, err := os.Stat(path.Join(cfg.Ebpf.BPFFSPath, p.PinName)); err != nil {
-			if os.IsNotExist(err) {
-				if err := runMake(p.MakeLoadTarget, cfg); err != nil {
-					errs = append(errs, err.Error())
-					continue
-				}
+		flags, err := p.Flags()
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
 
-				if err := runMake(p.MakeAttachTarget, cfg); err != nil {
-					errs = append(errs, err.Error())
-				}
-			} else {
-				errs = append(errs, err.Error())
-			}
+		if err := run(
+			path.Join(cfg.Ebpf.ProgramsSourcePath, p.Name),
+			flags,
+			nil,
+			cfg.RuntimeStdout,
+			cfg.RuntimeStderr,
+		); err != nil {
+			errs = append(errs, err.Error())
+			continue
 		}
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("loading and attaching ebpf programs failed:\n\t%s",
+		return fmt.Errorf("loading and attaching bpf programs failed:\n%s",
 			strings.Join(errs, "\n\t"))
 	}
 

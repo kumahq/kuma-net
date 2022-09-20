@@ -1,8 +1,22 @@
 ARG BASE_IMAGE_ARCH=amd64
 
-FROM --platform=linux/$BASE_IMAGE_ARCH merbridge/merbridge:0.7.0 as merbridge
+FROM --platform=linux/$BASE_IMAGE_ARCH ubuntu:22.04
 
-COPY /tools/builds/ebpf/compile.mk /app/bpf/Makefile
-COPY /tools/builds/ebpf/load-and-attach.mk /app/bpf/
+ARG DEBIAN_FRONTEND=noninteractive
 
-RUN make compile MESH_MODE=kuma DEBUG=1 USE_RECONNECT=1
+RUN apt-get update &&\
+    apt-get install -y git make flex libelf-dev clang
+
+RUN git clone \
+  --recurse-submodules \
+  --branch feat/refactor-to-use-libbpf-core \
+  https://github.com/bartsmykla/merbridge.git \
+  /app
+
+RUN make \
+  MESH_MODE=kuma \
+  DEBUG=1 \
+  USE_RECONNECT=1 \
+  LLVM_STRIP=llvm-strip-14 \
+  --directory app/bpf \
+  all

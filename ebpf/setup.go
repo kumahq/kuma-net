@@ -168,7 +168,7 @@ func Setup(cfg config.Config) (string, error) {
 	}
 
 	if err := netnsPodIPsMap.Update(netnsInode, ip, ciliumebpf.UpdateAny); err != nil {
-		return "", fmt.Errorf("updating markPodIPs map failed (ip: %v, nens: %v): %v", ip, netnsInode, err)
+		return "", fmt.Errorf("updating netns_pod_ips map failed (ip: %v, nens: %v): %v", ip, netnsInode, err)
 	}
 
 	// exclude inbound ports

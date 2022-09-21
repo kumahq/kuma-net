@@ -147,7 +147,7 @@ func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("loading and attaching bpf programs failed:\n%s",
+		return fmt.Errorf("loading and attaching ebpf programs failed:\n\t%s",
 			strings.Join(errs, "\n\t"))
 	}
 

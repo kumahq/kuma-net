@@ -149,7 +149,7 @@ func Setup(cfg config.Config) (string, error) {
 		return "", fmt.Errorf("loading pinned local_pod_ips map failed: %v", err)
 	}
 
-	markPodIPsMap, err := ciliumebpf.LoadPinnedMap(
+	netnsPodIPsMap, err := ciliumebpf.LoadPinnedMap(
 		cfg.Ebpf.BPFFSPath+NetNSPodIPSPinnedMapPathRelativeToBPFFS,
 		&ciliumebpf.LoadPinOptions{},
 	)
@@ -167,7 +167,7 @@ func Setup(cfg config.Config) (string, error) {
 		return "", err
 	}
 
-	if err := markPodIPsMap.Update(netnsInode, ip, ciliumebpf.UpdateAny); err != nil {
+	if err := netnsPodIPsMap.Update(netnsInode, ip, ciliumebpf.UpdateAny); err != nil {
 		return "", fmt.Errorf("updating markPodIPs map failed (ip: %v, nens: %v): %v", ip, netnsInode, err)
 	}
 

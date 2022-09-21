@@ -154,7 +154,7 @@ func Setup(cfg config.Config) (string, error) {
 		&ciliumebpf.LoadPinOptions{},
 	)
 	if err != nil {
-		return "", fmt.Errorf("loading pinned mark_pod_ips map failed: %v", err)
+		return "", fmt.Errorf("loading pinned netns_pod_ips map failed: %v", err)
 	}
 
 	netnsInode, err := GetFileInode("/proc/self/ns/net")

@@ -19,8 +19,8 @@ spec:
     metadata:
       labels:
         app: http-echo
-    nodeName: kind-worker
     spec:
+      nodeName: kuma-worker
       containers:
         - name: http-echo
           resources:

@@ -80,7 +80,6 @@ kind/start:
 			--config "$(TOP)/$(CONFIG_PATH)/kind-config.yaml" \
 			--kubeconfig $(KIND_KUBECONFIG) \
 			--quiet --wait 120s && \
-		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) apply -f $(TOP)/calico.yaml && \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL_PATH) scale deployment --replicas 1 coredns --namespace kube-system && \
 		make kind/wait)
 	@echo

@@ -2,6 +2,10 @@ package blackbox_tests_test
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net"
+	"strconv"
+
 	"github.com/kumahq/kuma-net/iptables/builder"
 	"github.com/kumahq/kuma-net/iptables/consts"
 	"github.com/kumahq/kuma-net/test/blackbox_tests"
@@ -14,9 +18,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
-	"io/ioutil"
-	"net"
-	"strconv"
 )
 
 var _ = Describe("Outbound IPv4 TCP traffic to any address:port", func() {
@@ -217,6 +218,9 @@ var _ = Describe("Outbound IPv4 TCP traffic to any address:port except excluded 
 					},
 				},
 				RuntimeStdout: ioutil.Discard,
+				Log: config.LogConfig{
+					Enabled: true,
+				},
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -437,6 +441,9 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except excluded 
 				},
 				IPv6:          true,
 				RuntimeStdout: ioutil.Discard,
+				Log: config.LogConfig{
+					Enabled: true,
+				},
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(

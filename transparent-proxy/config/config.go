@@ -7,6 +7,8 @@ import (
 	"os/exec"
 )
 
+const DebugLogLevel uint16 = 7
+
 type Owner struct {
 	UID string
 }
@@ -67,6 +69,11 @@ type Ebpf struct {
 	ProgramsSourcePath string
 }
 
+type LogConfig struct {
+	Enabled bool
+	Level   uint16
+}
+
 type Config struct {
 	Owner    Owner
 	Redirect Redirect
@@ -88,6 +95,9 @@ type Config struct {
 	// DryRun when set will not execute, but just display instructions which
 	// otherwise would have served to install transparent proxy
 	DryRun bool
+	// Log is the place where configuration for logging iptables rules will
+	// be placed
+	Log LogConfig
 }
 
 // ShouldDropInvalidPackets is just a convenience function which can be used in
@@ -177,6 +187,10 @@ func defaultConfig() Config {
 		RuntimeStderr:      os.Stderr,
 		Verbose:            true,
 		DryRun:             false,
+		Log: LogConfig{
+			Enabled: false,
+			Level:   DebugLogLevel,
+		},
 	}
 }
 
@@ -292,6 +306,12 @@ func MergeConfigWithDefaults(cfg Config) Config {
 
 	// .DryRun
 	result.DryRun = cfg.DryRun
+
+	// .Log
+	result.Log.Enabled = cfg.Log.Enabled
+	if result.Log.Level != DebugLogLevel {
+		result.Log.Level = cfg.Log.Level
+	}
 
 	return result
 }

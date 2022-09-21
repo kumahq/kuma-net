@@ -44,6 +44,9 @@ var _ = Describe("Inbound IPv4 TCP traffic from any ports", func() {
 					},
 				},
 				RuntimeStdout: ioutil.Discard,
+				Log: config.LogConfig{
+					Enabled: true,
+				},
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
@@ -120,6 +123,9 @@ var _ = Describe("Inbound IPv6 TCP traffic from any ports", func() {
 				},
 				IPv6:          true,
 				RuntimeStdout: ioutil.Discard,
+				Log: config.LogConfig{
+					Enabled: true,
+				},
 			}
 
 			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(

@@ -150,7 +150,7 @@ func Setup(cfg config.Config) (string, error) {
 	}
 
 	markPodIPsMap, err := ciliumebpf.LoadPinnedMap(
-		cfg.Ebpf.BPFFSPath+MarkPodIPSPinnedMapPathRelativeToBPFFS,
+		cfg.Ebpf.BPFFSPath+NetNSPodIPSPinnedMapPathRelativeToBPFFS,
 		&ciliumebpf.LoadPinOptions{},
 	)
 	if err != nil {

@@ -45,7 +45,7 @@ const MaxItemLen = 10
 // merbridge is hard-coding it as well, and we don't want to allot to change it
 // by mistake
 const LocalPodIPSPinnedMapPathRelativeToBPFFS = "/local_pod_ips"
-const MarkPodIPSPinnedMapPathRelativeToBPFFS = "/mark_pod_ips"
+const NetNSPodIPSPinnedMapPathRelativeToBPFFS = "/netns_pod_ips"
 
 type Cidr struct {
 	Net  uint32 // network order

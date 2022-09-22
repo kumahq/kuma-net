@@ -76,8 +76,18 @@ func ipStrToPtr(ipstr string) (unsafe.Pointer, error) {
 func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
 	var errs []string
 
+	cgroup, err := getCgroupPath(cfg)
+	if err != nil {
+		return fmt.Errorf("getting cgroup failed with error: %s", err)
+	}
+
+	bpffs, err := getBpffsPath(cfg)
+	if err != nil {
+		return fmt.Errorf("getting bpffs failed with error: %s", err)
+	}
+
 	for _, p := range programs {
-		if err := p.LoadAndAttach(cfg); err != nil {
+		if err := p.LoadAndAttach(cfg, cgroup, bpffs); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}

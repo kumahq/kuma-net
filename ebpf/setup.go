@@ -41,7 +41,11 @@ var programs = []*Program{
 	},
 	{
 		Name: "mb_tc",
-		Flags: func(cfg config.Config) ([]string, error) {
+		Flags: func(
+			cfg config.Config,
+			cgroup string,
+			bpffs string,
+		) ([]string, error) {
 			var err error
 			var iface string
 
@@ -53,7 +57,7 @@ var programs = []*Program{
 
 			return flags(map[string]string{
 				"--iface": iface,
-			})(cfg)
+			})(cfg, cgroup, bpffs)
 		},
 	},
 }

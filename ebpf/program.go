@@ -21,13 +21,23 @@ const (
 	FSTypeBPF     = "bpf"
 )
 
+type FlagGenerator = func(
+	cfg tproxyconfig.Config,
+	cgroup string,
+	bpffs string,
+) ([]string, error)
+
 type Program struct {
 	Name  string
-	Flags func(cfg tproxyconfig.Config) ([]string, error)
+	Flags FlagGenerator
 }
 
-func (p Program) LoadAndAttach(cfg tproxyconfig.Config) error {
-	flags, err := p.Flags(cfg)
+func (p Program) LoadAndAttach(
+	cfg tproxyconfig.Config,
+	cgroup string,
+	bpffs string,
+) error {
+	flags, err := p.Flags(cfg, cgroup, bpffs)
 	if err != nil {
 		return err
 	}
@@ -109,102 +119,13 @@ func initBPFFSMaybe(fsPath string) error {
 	return nil
 }
 
-type FlagGenerator = func(cfg tproxyconfig.Config) ([]string, error)
-
-func flags(flags map[string]string) FlagGenerator {
-	return func(cfg tproxyconfig.Config) ([]string, error) {
-		bpffsPath := cfg.Ebpf.BPFFSPath
-		f := map[string]string{
-			"--bpffs": bpffsPath,
-		}
-
-		if cfg.Verbose {
-			f["--verbose"] = ""
-		}
-
-		if bpffsPath != "" {
-			mounts, err := mountinfo.GetMounts(mountinfo.SingleEntryFilter(bpffsPath))
-			if err != nil {
-				return nil, fmt.Errorf("getting mount (%s) failed with error: %s",
-					bpffsPath, err,
-				)
-			}
-
-			if len(mounts) == 1 {
-				fsType := mounts[0].FSType
-
-				if fsType == FSTypeBPF {
-					if flags == nil {
-						return mapFlagsToSlice(f), nil
-					}
-
-					for k, v := range flags {
-						f[k] = v
-					}
-
-					return mapFlagsToSlice(f), nil
-				}
-
-				_, _ = fmt.Fprintf(cfg.RuntimeStderr,
-					"warning: found mount %s, but its type (%s) is not %s - ignoring\n",
-					bpffsPath, fsType, FSTypeBPF,
-				)
-			} else {
-				_, _ = fmt.Fprintf(cfg.RuntimeStderr,
-					"warning: expected %s mount: %s cannot be found - ignoring\n",
-					FSTypeBPF, bpffsPath,
-				)
-			}
-		}
-
-		mounts, err := mountinfo.GetMounts(mountinfo.FSTypeFilter(FSTypeBPF))
-		if err != nil {
-			return nil, fmt.Errorf("getting mounts failed with error: %s", err)
-		}
-
-		if len(mounts) == 0 {
-			_, _ = fmt.Fprintf(cfg.RuntimeStderr,
-				"warning: cannot find any %s mounts - will try to manually mount %s\n",
-				FSTypeBPF, bpffsPath,
-			)
-
-			return mapFlagsToSlice(f), initBPFFSMaybe(bpffsPath)
-		}
-
-		if len(mounts) > 1 {
-			var mountpoints []string
-
-			for _, mount := range mounts {
-				mountpoints = append(mountpoints, mount.Mountpoint)
-			}
-
-			_, _ = fmt.Fprintf(cfg.RuntimeStderr,
-				"found %d %s mounts, only first one (%s) will be used (ignored: [%s])\n",
-				len(mounts), FSTypeBPF, mountpoints[0], strings.Join(mountpoints, ", "),
-			)
-		}
-
-		f["--bpffs"] = mounts[0].Mountpoint
-
-		if flags == nil {
-			return mapFlagsToSlice(f), nil
-		}
-
-		for k, v := range flags {
-			f[k] = v
-		}
-
-		return mapFlagsToSlice(f), nil
-	}
-}
-
-func cgroupFlags(cfg tproxyconfig.Config) ([]string, error) {
+func getCgroupPath(cfg tproxyconfig.Config) (string, error) {
 	cgroupPath := cfg.Ebpf.CgroupPath
 
 	if cgroupPath != "" {
 		mounts, err := mountinfo.GetMounts(mountinfo.SingleEntryFilter(cgroupPath))
 		if err != nil {
-			return nil, fmt.Errorf(
+			return "", fmt.Errorf(
 				"getting mount (%s) failed with error: %s", cgroupPath, err)
 		}
 
@@ -212,9 +133,7 @@ func cgroupFlags(cfg tproxyconfig.Config) ([]string, error) {
 			fsType, mountpoint := mounts[0].FSType, mounts[0].Mountpoint
 
 			if fsType == FSTypeCgroup2 {
-				return flags(map[string]string{
-					"--cgroup": mountpoint,
-				})(cfg)
+				return mountpoint, nil
 			}
 
 			_, _ = fmt.Fprintf(cfg.RuntimeStderr,
@@ -229,11 +148,11 @@ func cgroupFlags(cfg tproxyconfig.Config) ([]string, error) {
 
 	mounts, err := mountinfo.GetMounts(mountinfo.FSTypeFilter(FSTypeCgroup2))
 	if err != nil {
-		return nil, fmt.Errorf("getting mounts failed with error: %s", err)
+		return "", fmt.Errorf("getting mounts failed with error: %s", err)
 	}
 
 	if len(mounts) == 0 {
-		return nil, fmt.Errorf("cannot find any %s mounts", FSTypeCgroup2)
+		return "", fmt.Errorf("cannot find any %s mounts", FSTypeCgroup2)
 	}
 
 	if len(mounts) > 1 {
@@ -252,9 +171,95 @@ func cgroupFlags(cfg tproxyconfig.Config) ([]string, error) {
 	_, _ = fmt.Fprintf(cfg.RuntimeStdout,
 		"Using %s mount: %s\n", FSTypeCgroup2, mounts[0].Mountpoint)
 
+	return mounts[0].Mountpoint, nil
+}
+
+func getBpffsPath(cfg tproxyconfig.Config) (string, error) {
+	bpffsPath := cfg.Ebpf.BPFFSPath
+
+	if bpffsPath != "" {
+		mounts, err := mountinfo.GetMounts(mountinfo.SingleEntryFilter(bpffsPath))
+		if err != nil {
+			return "", fmt.Errorf("getting mount (%s) failed with error: %s",
+				bpffsPath, err,
+			)
+		}
+
+		if len(mounts) == 1 {
+			fsType := mounts[0].FSType
+
+			if fsType == FSTypeBPF {
+				return bpffsPath, nil
+			}
+
+			_, _ = fmt.Fprintf(cfg.RuntimeStderr,
+				"warning: found mount %s, but its type (%s) is not %s - ignoring\n",
+				bpffsPath, fsType, FSTypeBPF,
+			)
+		} else {
+			_, _ = fmt.Fprintf(cfg.RuntimeStderr,
+				"warning: expected %s mount: %s cannot be found - ignoring\n",
+				FSTypeBPF, bpffsPath,
+			)
+		}
+	}
+
+	mounts, err := mountinfo.GetMounts(mountinfo.FSTypeFilter(FSTypeBPF))
+	if err != nil {
+		return "", fmt.Errorf("getting mounts failed with error: %s", err)
+	}
+
+	if len(mounts) == 0 {
+		_, _ = fmt.Fprintf(cfg.RuntimeStderr,
+			"warning: cannot find any %s mounts - will try to manually mount %s\n",
+			FSTypeBPF, bpffsPath,
+		)
+
+		return bpffsPath, initBPFFSMaybe(bpffsPath)
+	}
+
+	if len(mounts) > 1 {
+		var mountpoints []string
+
+		for _, mount := range mounts {
+			mountpoints = append(mountpoints, mount.Mountpoint)
+		}
+
+		_, _ = fmt.Fprintf(cfg.RuntimeStderr,
+			"found %d %s mounts, only first one (%s) will be used (ignored: [%s])\n",
+			len(mounts), FSTypeBPF, mountpoints[0], strings.Join(mountpoints, ", "),
+		)
+	}
+
+	return mounts[0].Mountpoint, nil
+}
+
+func flags(flags map[string]string) FlagGenerator {
+	return func(cfg tproxyconfig.Config, _ string, bpffs string) ([]string, error) {
+		f := map[string]string{
+			"--bpffs": bpffs,
+		}
+
+		if cfg.Verbose {
+			f["--verbose"] = ""
+		}
+
+		for k, v := range flags {
+			f[k] = v
+		}
+
+		return mapFlagsToSlice(f), nil
+	}
+}
+
+func cgroupFlags(
+	cfg tproxyconfig.Config,
+	cgroup string,
+	bpffs string,
+) ([]string, error) {
 	return flags(map[string]string{
-		"--cgroup": mounts[0].Mountpoint,
-	})(cfg)
+		"--cgroup": cgroup,
+	})(cfg, cgroup, bpffs)
 }
 
 func mapFlagsToSlice(flags map[string]string) []string {

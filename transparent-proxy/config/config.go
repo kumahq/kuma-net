@@ -61,9 +61,13 @@ func (c Chain) GetFullName(prefix string) string {
 }
 
 type Ebpf struct {
-	Enabled            bool
-	InstanceIP         string
-	BPFFSPath          string
+	Enabled    bool
+	InstanceIP string
+	BPFFSPath  string
+	CgroupPath string
+	// The name of network interface which TC ebpf programs should bind to,
+	// when not provided, we'll try to automatically determine it
+	TCAttachIface      string
 	ProgramsSourcePath string
 }
 

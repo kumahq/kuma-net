@@ -62,10 +62,6 @@ var programs = []*Program{
 	},
 }
 
-// TODO (bartsmykla): currently we are assuming there is only one other than
-//  loopback interface, and we are attaching eBPF programs only to it.
-//  It's probably fine in the context of k8s and init containers,
-//  but not for vms/universal
 func getNonLoopbackRunningInterface() (string, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {

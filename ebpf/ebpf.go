@@ -4,15 +4,9 @@ package ebpf
 
 import (
 	"fmt"
-	"io"
 	"net"
-	"os"
-	"os/exec"
-	"path"
 	"strings"
 	"unsafe"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
@@ -64,11 +58,6 @@ type PodConfig struct {
 	ExcludeOutPorts  [MaxItemLen]uint16
 }
 
-type Program struct {
-	Name  string
-	Flags func(verbose bool) ([]string, error)
-}
-
 func ipStrToPtr(ipstr string) (unsafe.Pointer, error) {
 	var ip net.IP
 
@@ -84,99 +73,28 @@ func ipStrToPtr(ipstr string) (unsafe.Pointer, error) {
 	return unsafe.Pointer(&ip[0]), nil
 }
 
-func run(cmdToExec string, args, envVars []string, stdout, stderr io.Writer) error {
-	_, _ = stdout.Write([]byte(fmt.Sprintf("Running: %s %s %s\n",
-		strings.Join(envVars, " "), cmdToExec, strings.Join(args, " "))))
-
-	cmd := exec.Command(cmdToExec, args...)
-	cmd.Env = append(os.Environ(), envVars...)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-
-	err := cmd.Run()
-	if code := cmd.ProcessState.ExitCode(); code != 0 || err != nil {
-		return fmt.Errorf("unexpected exit code: %d, err: %v", code, err)
-	}
-
-	_, _ = stdout.Write([]byte("\n"))
-
-	return nil
-}
-
-func isDirEmpty(dirPath string) (bool, error) {
-	dir, err := os.ReadDir(dirPath)
-	if err != nil {
-		return false, err
-	}
-
-	for _, entry := range dir {
-		if !entry.IsDir() {
-			return false, nil
-		}
-
-		fullPath := path.Join(dirPath, entry.Name())
-
-		if isEmpty, err := isDirEmpty(fullPath); err != nil || !isEmpty {
-			return false, err
-		}
-	}
-
-	return true, nil
-}
-
 func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
 	var errs []string
 
-	for _, p := range programs {
-		flags, err := p.Flags(cfg.Verbose)
-		if err != nil {
-			errs = append(errs, err.Error())
-			continue
-		}
+	cgroup, err := getCgroupPath(cfg)
+	if err != nil {
+		return fmt.Errorf("getting cgroup failed with error: %s", err)
+	}
 
-		if err := run(
-			path.Join(cfg.Ebpf.ProgramsSourcePath, p.Name),
-			flags,
-			nil,
-			cfg.RuntimeStdout,
-			cfg.RuntimeStderr,
-		); err != nil {
+	bpffs, err := getBpffsPath(cfg)
+	if err != nil {
+		return fmt.Errorf("getting bpffs failed with error: %s", err)
+	}
+
+	for _, p := range programs {
+		if err := p.LoadAndAttach(cfg, cgroup, bpffs); err != nil {
 			errs = append(errs, err.Error())
-			continue
 		}
 	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("loading and attaching ebpf programs failed:\n\t%s",
 			strings.Join(errs, "\n\t"))
-	}
-
-	return nil
-}
-
-func InitBPFFSMaybe(fsPath string) error {
-	stat, err := os.Stat(fsPath)
-	if err != nil {
-		return err
-	}
-
-	if !stat.IsDir() {
-		return fmt.Errorf("bpf fs path (%s) is not a directory", fsPath)
-	}
-
-	isEmpty, err := isDirEmpty(fsPath)
-	if err != nil {
-		return fmt.Errorf("checking if BPF file system path is empty failed: %v", err)
-	}
-
-	// if directory is not empty, we are assuming BPF filesystem was already
-	// initialized, so we won't do it again
-	if !isEmpty {
-		return nil
-	}
-
-	if err := unix.Mount("bpf", fsPath, "bpf", 0, ""); err != nil {
-		return fmt.Errorf("mounting BPF file system failed: %v", err)
 	}
 
 	return nil

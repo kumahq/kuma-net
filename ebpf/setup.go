@@ -9,33 +9,31 @@ import (
 	"syscall"
 
 	ciliumebpf "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/rlimit"
 
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
-const CgroupPath = "/sys/fs/cgroup"
-const BpfFSPath = "/run/kuma/bpf"
-
 var programs = []*Program{
 	{
 		Name:  "mb_connect",
-		Flags: cgroupFlags(),
+		Flags: cgroupFlags,
 	},
 	{
 		Name:  "mb_sockops",
-		Flags: cgroupFlags(),
+		Flags: cgroupFlags,
 	},
 	{
 		Name:  "mb_get_sockopts",
-		Flags: cgroupFlags(),
+		Flags: cgroupFlags,
 	},
 	{
 		Name:  "mb_sendmsg",
-		Flags: cgroupFlags(),
+		Flags: cgroupFlags,
 	},
 	{
 		Name:  "mb_recvmsg",
-		Flags: cgroupFlags(),
+		Flags: cgroupFlags,
 	},
 	{
 		Name:  "mb_redir",
@@ -43,77 +41,55 @@ var programs = []*Program{
 	},
 	{
 		Name: "mb_tc",
-		Flags: func(verbose bool) ([]string, error) {
-			if iface, err := getNonLoopbackInterface(); err != nil {
+		Flags: func(
+			cfg config.Config,
+			cgroup string,
+			bpffs string,
+		) ([]string, error) {
+			var err error
+			var iface string
+
+			if cfg.Ebpf.TCAttachIface != "" && ifaceIsUp(cfg.Ebpf.TCAttachIface) {
+				iface = cfg.Ebpf.TCAttachIface
+			} else if iface, err = getNonLoopbackRunningInterface(); err != nil {
 				return nil, fmt.Errorf("getting non-loopback interface failed: %v", err)
-			} else {
-				return flags(map[string]string{
-					"--iface": iface.Name,
-				})(verbose)
 			}
+
+			return flags(map[string]string{
+				"--iface": iface,
+			})(cfg, cgroup, bpffs)
 		},
 	},
 }
 
-func flags(flags map[string]string) func(bool) ([]string, error) {
-	f := map[string]string{
-		"--bpffs": BpfFSPath,
-	}
-
-	return func(verbose bool) ([]string, error) {
-		if verbose {
-			f["--verbose"] = ""
-		}
-
-		if flags == nil {
-			return mapFlagsToSlice(f), nil
-		}
-
-		for k, v := range flags {
-			f[k] = v
-		}
-
-		return mapFlagsToSlice(f), nil
-	}
-}
-
-func cgroupFlags() func(bool) ([]string, error) {
-	return flags(map[string]string{
-		"--cgroup": CgroupPath,
-	})
-}
-
-func mapFlagsToSlice(flags map[string]string) []string {
-	var result []string
-
-	for k, v := range flags {
-		result = append(result, k)
-
-		if v != "" {
-			result = append(result, v)
-		}
-	}
-
-	return result
-}
-
-// TODO (bartsmykla): currently we are assuming there is only one other than
-//  loopback interface, and we are attaching eBPF programs only to it.
-//  It's probably fine in the context of k8s and init containers,
-//  but not for vms/universal
-func getNonLoopbackInterface() (*net.Interface, error) {
+func getNonLoopbackRunningInterface() (string, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list network interfaces: %v", err)
+		return "", fmt.Errorf("failed to list network interfaces: %v", err)
 	}
 
 	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback == 0 {
-			return &iface, nil
+		if iface.Flags&net.FlagLoopback == 0 && iface.Flags&net.FlagUp != 0 {
+			return iface.Name, nil
 		}
 	}
 
-	return nil, fmt.Errorf("cannot find other than loopback interface")
+	return "", fmt.Errorf("cannot find other than loopback interface")
+}
+
+func ifaceIsUp(ifName string) bool {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+
+	for _, iface := range interfaces {
+		if iface.Name == ifName && iface.Flags&net.FlagUp != 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func GetFileInode(path string) (uint64, error) {
@@ -133,8 +109,8 @@ func Setup(cfg config.Config) (string, error) {
 		return "", fmt.Errorf("root user in required for this process or container")
 	}
 
-	if err := InitBPFFSMaybe(cfg.Ebpf.BPFFSPath); err != nil {
-		return "", fmt.Errorf("initializing BPF file system failed: %v", err)
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return "", fmt.Errorf("removing memory lock failed with error: %s", err)
 	}
 
 	if err := LoadAndAttachEbpfPrograms(programs, cfg); err != nil {

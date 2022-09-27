@@ -1,5 +1,4 @@
 ARG BASE_IMAGE_ARCH=amd64
-ARG DEBUG=0
 
 FROM --platform=linux/$BASE_IMAGE_ARCH ubuntu:22.04 as builder
 
@@ -9,16 +8,38 @@ RUN apt-get update && \
     apt-get install -y git make flex libelf-dev clang libcap-dev libbfd-dev \
       pkg-config
 
+ARG REPO="https://github.com/kumahq/merbridge.git"
+ARG BRANCH=main
+ARG COMMIT_SHA
+
 RUN git clone \
   --recurse-submodules \
-  https://github.com/kumahq/merbridge.git \
+  --branch $BRANCH \
+  $REPO \
   /app
+
+RUN \
+  if [ -n "$COMMIT_SHA" ]; then \
+    git --git-dir /app/.git checkout $COMMIT_SHA; \
+  fi
+
+ARG LLVM_STRIP=llvm-strip-14
+
+# Step to cache it when building docker image
+RUN make \
+  LLVM_STRIP=$LLVM_STRIP \
+  --directory /app/bpf \
+  /app/bpf/.output/bpftool \
+  /app/bpf/.output/bpftool/bootstrap/bpftool \
+  /app/bpf/.output/libbpf.a
+
+ARG DEBUG=0
 
 RUN make \
   MESH_MODE=kuma \
   DEBUG=$DEBUG \
   USE_RECONNECT=1 \
-  LLVM_STRIP=llvm-strip-14 \
+  LLVM_STRIP=$LLVM_STRIP \
   --directory /app/bpf \
   all
 

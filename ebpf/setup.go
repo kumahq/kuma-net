@@ -40,6 +40,10 @@ var programs = []*Program{
 		Flags: flags(nil),
 	},
 	{
+		Name:  "mb_netns_cleanup",
+		Flags: flags(nil),
+	},
+	{
 		Name: "mb_tc",
 		Flags: func(
 			cfg config.Config,

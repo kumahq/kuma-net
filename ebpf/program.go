@@ -13,7 +13,7 @@ import (
 	"github.com/moby/sys/mountinfo"
 	"golang.org/x/sys/unix"
 
-	tproxyconfig "github.com/kumahq/kuma-net/transparent-proxy/config"
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 const (
@@ -22,18 +22,19 @@ const (
 )
 
 type FlagGenerator = func(
-	cfg tproxyconfig.Config,
+	cfg config.Config,
 	cgroup string,
 	bpffs string,
 ) ([]string, error)
 
 type Program struct {
-	Name  string
-	Flags FlagGenerator
+	Name    string
+	Flags   FlagGenerator
+	Cleanup func(cfg config.Config) error
 }
 
 func (p Program) LoadAndAttach(
-	cfg tproxyconfig.Config,
+	cfg config.Config,
 	cgroup string,
 	bpffs string,
 ) error {
@@ -119,7 +120,7 @@ func initBPFFSMaybe(fsPath string) error {
 	return nil
 }
 
-func getCgroupPath(cfg tproxyconfig.Config) (string, error) {
+func getCgroupPath(cfg config.Config) (string, error) {
 	cgroupPath := cfg.Ebpf.CgroupPath
 
 	if cgroupPath != "" {
@@ -174,7 +175,7 @@ func getCgroupPath(cfg tproxyconfig.Config) (string, error) {
 	return mounts[0].Mountpoint, nil
 }
 
-func getBpffsPath(cfg tproxyconfig.Config) (string, error) {
+func getBpffsPath(cfg config.Config) (string, error) {
 	bpffsPath := cfg.Ebpf.BPFFSPath
 
 	if bpffsPath != "" {
@@ -235,7 +236,7 @@ func getBpffsPath(cfg tproxyconfig.Config) (string, error) {
 }
 
 func flags(flags map[string]string) FlagGenerator {
-	return func(cfg tproxyconfig.Config, _ string, bpffs string) ([]string, error) {
+	return func(cfg config.Config, _ string, bpffs string) ([]string, error) {
 		f := map[string]string{
 			"--bpffs": bpffs,
 		}
@@ -253,7 +254,7 @@ func flags(flags map[string]string) FlagGenerator {
 }
 
 func cgroupFlags(
-	cfg tproxyconfig.Config,
+	cfg config.Config,
 	cgroup string,
 	bpffs string,
 ) ([]string, error) {

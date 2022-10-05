@@ -14,58 +14,6 @@ import (
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
-var programs = []*Program{
-	{
-		Name:  "mb_connect",
-		Flags: cgroupFlags,
-	},
-	{
-		Name:  "mb_sockops",
-		Flags: cgroupFlags,
-	},
-	{
-		Name:  "mb_get_sockopts",
-		Flags: cgroupFlags,
-	},
-	{
-		Name:  "mb_sendmsg",
-		Flags: cgroupFlags,
-	},
-	{
-		Name:  "mb_recvmsg",
-		Flags: cgroupFlags,
-	},
-	{
-		Name:  "mb_redir",
-		Flags: flags(nil),
-	},
-	{
-		Name:  "mb_netns_cleanup",
-		Flags: flags(nil),
-	},
-	{
-		Name: "mb_tc",
-		Flags: func(
-			cfg config.Config,
-			cgroup string,
-			bpffs string,
-		) ([]string, error) {
-			var err error
-			var iface string
-
-			if cfg.Ebpf.TCAttachIface != "" && ifaceIsUp(cfg.Ebpf.TCAttachIface) {
-				iface = cfg.Ebpf.TCAttachIface
-			} else if iface, err = getNonLoopbackRunningInterface(); err != nil {
-				return nil, fmt.Errorf("getting non-loopback interface failed: %v", err)
-			}
-
-			return flags(map[string]string{
-				"--iface": iface,
-			})(cfg, cgroup, bpffs)
-		},
-	},
-}
-
 func getNonLoopbackRunningInterface() (string, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
@@ -122,7 +70,7 @@ func Setup(cfg config.Config) (string, error) {
 	}
 
 	localPodIPsMap, err := ciliumebpf.LoadPinnedMap(
-		cfg.Ebpf.BPFFSPath+LocalPodIPSPinnedMapPathRelativeToBPFFS,
+		cfg.Ebpf.BPFFSPath+MapRelativePathLocalPodIPs,
 		&ciliumebpf.LoadPinOptions{},
 	)
 	if err != nil {
@@ -130,7 +78,7 @@ func Setup(cfg config.Config) (string, error) {
 	}
 
 	netnsPodIPsMap, err := ciliumebpf.LoadPinnedMap(
-		cfg.Ebpf.BPFFSPath+NetNSPodIPSPinnedMapPathRelativeToBPFFS,
+		cfg.Ebpf.BPFFSPath+MapRelativePathNetNSPodIPs,
 		&ciliumebpf.LoadPinOptions{},
 	)
 	if err != nil {

@@ -15,6 +15,10 @@ const (
 	// TODO (bartsmykla): add some description
 	InboundPassthroughSourceAddressCIDRIPv4 = "127.0.0.6/32"
 	InboundPassthroughSourceAddressCIDRIPv6 = "::6/128"
+	OutputLogPrefix                         = "OUTPUT:"
+	PreroutingLogPrefix                     = "PREROUTING:"
+	UDP                                     = "udp"
+	TCP                                     = "tcp"
 )
 
 var Flags = map[string]map[bool]string{

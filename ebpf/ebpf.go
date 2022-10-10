@@ -4,47 +4,139 @@ package ebpf
 
 import (
 	"fmt"
-	"io"
 	"net"
-	"os"
-	"os/exec"
-	"path"
 	"strings"
 	"unsafe"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
-// MaxItemLen is the maximal amount of items like ports or IP ranges to include
-// or/and exclude. It's currently hardcoded to 10 as merbridge during creation
-// of this map is assigning hardcoded 244 bytes for map values:
-//
-//  Cidr:        8 bytes
-//    Cidr.Net:  4 bytes
-//    Cidr.Mask: 1 byte
-//    pad:       3 bytes
-//
-//  PodConfig:                                  244 bytes
-//    PodConfig.StatusPort:                       2 bytes
-//    pad:                                        2 bytes
-//    PodConfig.ExcludeOutRanges (10x Cidr):     80 bytes
-//    PodConfig.IncludeOutRanges (10x Cidr):     80 bytes
-//    PodConfig.IncludeInPorts   (10x 2 bytes):  20 bytes
-//    PodConfig.IncludeOutPorts  (10x 2 bytes):  20 bytes
-//    PodConfig.ExcludeInPorts   (10x 2 bytes):  20 bytes
-//    PodConfig.ExcludeOutPorts  (10x 2 bytes):  20 bytes
-//
-// todo (bartsmykla): merbridge flagged this constant to be changed, so if
-//                    it will be changed, we have to update it
-const MaxItemLen = 10
+const (
+	// MaxItemLen is the maximal amount of items like ports or IP ranges to include
+	// or/and exclude. It's currently hardcoded to 10 as merbridge during creation
+	// of this map is assigning hardcoded 244 bytes for map values:
+	//
+	//  Cidr:        8 bytes
+	//    Cidr.Net:  4 bytes
+	//    Cidr.Mask: 1 byte
+	//    pad:       3 bytes
+	//
+	//  PodConfig:                                  244 bytes
+	//    PodConfig.StatusPort:                       2 bytes
+	//    pad:                                        2 bytes
+	//    PodConfig.ExcludeOutRanges (10x Cidr):     80 bytes
+	//    PodConfig.IncludeOutRanges (10x Cidr):     80 bytes
+	//    PodConfig.IncludeInPorts   (10x 2 bytes):  20 bytes
+	//    PodConfig.IncludeOutPorts  (10x 2 bytes):  20 bytes
+	//    PodConfig.ExcludeInPorts   (10x 2 bytes):  20 bytes
+	//    PodConfig.ExcludeOutPorts  (10x 2 bytes):  20 bytes
+	//
+	// todo (bartsmykla): merbridge flagged this constant to be changed, so if
+	//                    it will be changed, we have to update it
+	MaxItemLen = 10
+	// MapRelativePathLocalPodIPs is a path where the local_pod_ips map
+	// is pinned, it's hardcoded as "{BPFFS_path}/tc/globals/local_pod_ips" because
+	// merbridge is hard-coding it as well, and we don't want to allot to change it
+	// by mistake
+	MapRelativePathLocalPodIPs   = "/local_pod_ips"
+	MapRelativePathNetNSPodIPs   = "/netns_pod_ips"
+	MapRelativePathCookieOrigDst = "/cookie_orig_dst"
+	MapRelativePathProcessIP     = "/process_ip"
+	MapRelativePathPairOrigDst   = "/pair_orig_dst"
+	MapRelativePathSockPairMap   = "/sock_pair_map"
+)
 
-// LocalPodIPSPinnedMapPathRelativeToBPFFS is a path where the local_pod_ips map
-// is pinned, it's hardcoded as "{BPFFS_path}/tc/globals/local_pod_ips" because
-// merbridge is hard-coding it as well, and we don't want to allot to change it
-// by mistake
-const LocalPodIPSPinnedMapPathRelativeToBPFFS = "/tc/globals/local_pod_ips"
+var programs = []*Program{
+	{
+		Name:  "mb_connect",
+		Flags: cgroupFlags,
+		Cleanup: cleanPathsRelativeToBPFFS(
+			"connect", // directory
+			MapRelativePathCookieOrigDst,
+			MapRelativePathNetNSPodIPs,
+			MapRelativePathLocalPodIPs,
+			MapRelativePathProcessIP,
+		),
+	},
+	{
+		Name:  "mb_sockops",
+		Flags: cgroupFlags,
+		Cleanup: cleanPathsRelativeToBPFFS(
+			"sockops",
+			MapRelativePathCookieOrigDst,
+			MapRelativePathProcessIP,
+			MapRelativePathPairOrigDst,
+			MapRelativePathSockPairMap,
+		),
+	},
+	{
+		Name:  "mb_get_sockopts",
+		Flags: cgroupFlags,
+		Cleanup: cleanPathsRelativeToBPFFS(
+			"get_sockopts",
+			MapRelativePathPairOrigDst,
+		),
+	},
+	{
+		Name:  "mb_sendmsg",
+		Flags: cgroupFlags,
+		Cleanup: cleanPathsRelativeToBPFFS(
+			"sendmsg",
+			MapRelativePathCookieOrigDst,
+		),
+	},
+	{
+		Name:  "mb_recvmsg",
+		Flags: cgroupFlags,
+		Cleanup: cleanPathsRelativeToBPFFS(
+			"recvmsg",
+			MapRelativePathCookieOrigDst,
+		),
+	},
+	{
+		Name:  "mb_redir",
+		Flags: flags(nil),
+		Cleanup: cleanPathsRelativeToBPFFS(
+			"redir",
+			MapRelativePathSockPairMap,
+		),
+	},
+	{
+		Name:  "mb_netns_cleanup",
+		Flags: flags(nil),
+		Cleanup: cleanPathsRelativeToBPFFS(
+			"netns_cleanup_prog",
+			"netns_cleanup_link",
+			MapRelativePathNetNSPodIPs,
+			MapRelativePathLocalPodIPs,
+		),
+	},
+	{
+		Name: "mb_tc",
+		Flags: func(
+			cfg config.Config,
+			cgroup string,
+			bpffs string,
+		) ([]string, error) {
+			var err error
+			var iface string
+
+			if cfg.Ebpf.TCAttachIface != "" && ifaceIsUp(cfg.Ebpf.TCAttachIface) {
+				iface = cfg.Ebpf.TCAttachIface
+			} else if iface, err = getNonLoopbackRunningInterface(); err != nil {
+				return nil, fmt.Errorf("getting non-loopback interface failed: %v", err)
+			}
+
+			return flags(map[string]string{
+				"--iface": iface,
+			})(cfg, cgroup, bpffs)
+		},
+		Cleanup: cleanPathsRelativeToBPFFS(
+			MapRelativePathLocalPodIPs,
+			MapRelativePathPairOrigDst,
+		),
+	},
+}
 
 type Cidr struct {
 	Net  uint32 // network order
@@ -63,128 +155,43 @@ type PodConfig struct {
 	ExcludeOutPorts  [MaxItemLen]uint16
 }
 
-type Program struct {
-	PinName          string
-	MakeLoadTarget   string
-	MakeAttachTarget string
-}
+func ipStrToPtr(ipstr string) (unsafe.Pointer, error) {
+	var ip net.IP
 
-func ipStrToUint32(ipstr string) (uint32, error) {
-	ip := net.ParseIP(ipstr)
-	if ip == nil {
-		return 0, fmt.Errorf("error when parsing ip string: %s", ipstr)
-	}
-
-	return *(*uint32)(unsafe.Pointer(&ip[12])), nil
-}
-
-func run(cmdToExec string, args, envVars []string, stdout, stderr io.Writer) error {
-	_, _ = stdout.Write([]byte(fmt.Sprintf("Running: %s %s %s\n",
-		strings.Join(envVars, " "), cmdToExec, strings.Join(args, " "))))
-
-	cmd := exec.Command(cmdToExec, args...)
-	cmd.Env = append(os.Environ(), envVars...)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-
-	err := cmd.Run()
-	if code := cmd.ProcessState.ExitCode(); code != 0 || err != nil {
-		return fmt.Errorf("unexpected exit code: %d, err: %v", code, err)
-	}
-
-	_, _ = stdout.Write([]byte("\n"))
-
-	return nil
-}
-
-func isDirEmpty(dirPath string) (bool, error) {
-	dir, err := os.ReadDir(dirPath)
-	if err != nil {
-		return false, err
-	}
-
-	for _, entry := range dir {
-		if !entry.IsDir() {
-			return false, nil
-		}
-
-		fullPath := path.Join(dirPath, entry.Name())
-
-		if isEmpty, err := isDirEmpty(fullPath); err != nil || !isEmpty {
-			return false, err
+	if ip = net.ParseIP(ipstr); ip == nil {
+		return nil, fmt.Errorf("error parse ip: %s", ipstr)
+	} else if ip.To4() != nil {
+		// ipv4, we need to clear the bytes
+		for i := 0; i < 12; i++ {
+			ip[i] = 0
 		}
 	}
 
-	return true, nil
-}
-
-func runMake(target string, cfg config.Config) error {
-	args := []string{"--directory", cfg.Ebpf.ProgramsSourcePath, target}
-	envVars := []string{
-		"MESH_MODE=kuma",
-		"USE_RECONNECT=1",
-		"DEBUG=1",
-		"PROG_MOUNT_PATH=" + cfg.Ebpf.BPFFSPath,
-	}
-
-	return run("make", args, envVars, cfg.RuntimeStdout, cfg.RuntimeStderr)
+	return unsafe.Pointer(&ip[0]), nil
 }
 
 func LoadAndAttachEbpfPrograms(programs []*Program, cfg config.Config) error {
 	var errs []string
 
-	for _, p := range programs {
-		if _, err := os.Stat(path.Join(cfg.Ebpf.BPFFSPath, p.PinName)); err != nil {
-			if os.IsNotExist(err) {
-				if err := runMake(p.MakeLoadTarget, cfg); err != nil {
-					errs = append(errs, err.Error())
-					continue
-				}
+	cgroup, err := getCgroupPath(cfg)
+	if err != nil {
+		return fmt.Errorf("getting cgroup failed with error: %s", err)
+	}
 
-				if err := runMake(p.MakeAttachTarget, cfg); err != nil {
-					errs = append(errs, err.Error())
-				}
-			} else {
-				errs = append(errs, err.Error())
-			}
+	bpffs, err := getBpffsPath(cfg)
+	if err != nil {
+		return fmt.Errorf("getting bpffs failed with error: %s", err)
+	}
+
+	for _, p := range programs {
+		if err := p.LoadAndAttach(cfg, cgroup, bpffs); err != nil {
+			errs = append(errs, err.Error())
 		}
 	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("loading and attaching ebpf programs failed:\n\t%s",
 			strings.Join(errs, "\n\t"))
-	}
-
-	return nil
-}
-
-func InitBPFFSMaybe(fsPath string) error {
-	stat, err := os.Stat(fsPath)
-	if err != nil {
-		return err
-	}
-
-	if !stat.IsDir() {
-		return fmt.Errorf("bpf fs path (%s) is not a directory", fsPath)
-	}
-
-	isEmpty, err := isDirEmpty(fsPath)
-	if err != nil {
-		return fmt.Errorf("checking if BPF file system path is empty failed: %v", err)
-	}
-
-	// if directory is not empty, we are assuming BPF filesystem was already
-	// initialized, so we won't do it again
-	if !isEmpty {
-		return nil
-	}
-
-	if err := unix.Mount("bpf", fsPath, "bpf", 0, ""); err != nil {
-		return fmt.Errorf("mounting BPF file system failed: %v", err)
-	}
-
-	if err := os.MkdirAll(path.Join(fsPath, "tc", "globals"), 0750); err != nil {
-		return fmt.Errorf("making directory for tc globals pinning failed: %v", err)
 	}
 
 	return nil

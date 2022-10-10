@@ -4,44 +4,56 @@ package ebpf
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"syscall"
 
 	ciliumebpf "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/rlimit"
 
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
-var programs = []*Program{
-	{
-		PinName:          "connect",
-		MakeLoadTarget:   "load-connect",
-		MakeAttachTarget: "attach-connect",
-	},
-	{
-		PinName:          "sockops",
-		MakeLoadTarget:   "load-sockops",
-		MakeAttachTarget: "attach-sockops",
-	},
-	{
-		PinName:          "get_sockopts",
-		MakeLoadTarget:   "load-getsock",
-		MakeAttachTarget: "attach-getsock",
-	},
-	{
-		PinName:          "redir",
-		MakeLoadTarget:   "load-redir",
-		MakeAttachTarget: "attach-redir",
-	},
-	{
-		PinName:          "sendmsg",
-		MakeLoadTarget:   "load-sendmsg",
-		MakeAttachTarget: "attach-sendmsg",
-	},
-	{
-		PinName:          "recvmsg",
-		MakeLoadTarget:   "load-recvmsg",
-		MakeAttachTarget: "attach-recvmsg",
-	},
+func getNonLoopbackRunningInterface() (string, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", fmt.Errorf("failed to list network interfaces: %v", err)
+	}
+
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback == 0 && iface.Flags&net.FlagUp != 0 {
+			return iface.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("cannot find other than loopback interface")
+}
+
+func ifaceIsUp(ifName string) bool {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+
+	for _, iface := range interfaces {
+		if iface.Name == ifName && iface.Flags&net.FlagUp != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func GetFileInode(path string) (uint64, error) {
+	f, err := os.Stat(path)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get the inode of %s", path)
+	}
+	stat, ok := f.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, fmt.Errorf("not syscall.Stat_t")
+	}
+	return stat.Ino, nil
 }
 
 func Setup(cfg config.Config) (string, error) {
@@ -49,8 +61,8 @@ func Setup(cfg config.Config) (string, error) {
 		return "", fmt.Errorf("root user in required for this process or container")
 	}
 
-	if err := InitBPFFSMaybe(cfg.Ebpf.BPFFSPath); err != nil {
-		return "", fmt.Errorf("initializing BPF file system failed: %v", err)
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return "", fmt.Errorf("removing memory lock failed with error: %s", err)
 	}
 
 	if err := LoadAndAttachEbpfPrograms(programs, cfg); err != nil {
@@ -58,24 +70,33 @@ func Setup(cfg config.Config) (string, error) {
 	}
 
 	localPodIPsMap, err := ciliumebpf.LoadPinnedMap(
-		cfg.Ebpf.BPFFSPath+LocalPodIPSPinnedMapPathRelativeToBPFFS,
+		cfg.Ebpf.BPFFSPath+MapRelativePathLocalPodIPs,
 		&ciliumebpf.LoadPinOptions{},
 	)
 	if err != nil {
 		return "", fmt.Errorf("loading pinned local_pod_ips map failed: %v", err)
 	}
 
-	tcEbpfObj := fmt.Sprintf("%s/mb_tc.o", cfg.Ebpf.ProgramsSourcePath)
-
-	if iface, err := getNonLoopbackInterface(); err != nil {
-		return "", fmt.Errorf("getting non-loopback interface failed: %v", err)
-	} else if err := AttachTC(iface.Name, tcEbpfObj); err != nil {
-		return "", fmt.Errorf("attaching tc failed: %v", err)
+	netnsPodIPsMap, err := ciliumebpf.LoadPinnedMap(
+		cfg.Ebpf.BPFFSPath+MapRelativePathNetNSPodIPs,
+		&ciliumebpf.LoadPinOptions{},
+	)
+	if err != nil {
+		return "", fmt.Errorf("loading pinned netns_pod_ips map failed: %v", err)
 	}
 
-	ip, err := ipStrToUint32(cfg.Ebpf.InstanceIP)
+	netnsInode, err := GetFileInode("/proc/self/ns/net")
+	if err != nil {
+		return "", fmt.Errorf("getting netns inode failed: %s", err)
+	}
+
+	ip, err := ipStrToPtr(cfg.Ebpf.InstanceIP)
 	if err != nil {
 		return "", err
+	}
+
+	if err := netnsPodIPsMap.Update(netnsInode, ip, ciliumebpf.UpdateAny); err != nil {
+		return "", fmt.Errorf("updating netns_pod_ips map failed (ip: %v, nens: %v): %v", ip, netnsInode, err)
 	}
 
 	// exclude inbound ports

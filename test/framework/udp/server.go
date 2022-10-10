@@ -90,6 +90,22 @@ func ReplyWithReceivedMsg(conn *net.UDPConn) error {
 	return nil
 }
 
+func ReplyWithMsg(message string) func(conn *net.UDPConn) error {
+	return func(conn *net.UDPConn) error {
+		buf := make([]byte, 1024)
+		_, clientAddr, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			return fmt.Errorf("cannot read from udp: %s", err)
+		}
+
+		if _, err := conn.WriteToUDP([]byte(message), clientAddr); err != nil {
+			return fmt.Errorf("cannot write to udp: %s", err)
+		}
+
+		return nil
+	}
+}
+
 func ReplyWithLocalAddr(conn *net.UDPConn) error {
 	_, clientAddr, err := conn.ReadFromUDP(nil)
 	if err != nil {

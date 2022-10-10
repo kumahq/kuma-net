@@ -17,6 +17,8 @@ package parameters
 
 import (
 	"fmt"
+
+	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
 type OwnerParameter struct {
@@ -51,6 +53,15 @@ func uid(id string, negative bool) *OwnerParameter {
 // with given UID
 func Uid(id string) *OwnerParameter {
 	return uid(id, false)
+}
+
+// UidRangeOrValue matches if the packet socket's file structure (if it has one) is owned by the user
+// with given list of UID values or ranges
+func UidRangeOrValue(uIDsToPorts config.UIDsToPorts) *OwnerParameter {
+	return &OwnerParameter{
+		flag:  "--uid-owner",
+		value: string(uIDsToPorts.UIDs),
+	}
 }
 
 func NotUid(id string) *OwnerParameter {

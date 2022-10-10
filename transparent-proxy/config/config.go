@@ -7,19 +7,35 @@ import (
 	"os/exec"
 )
 
+const DebugLogLevel uint16 = 7
+
 type Owner struct {
 	UID string
 }
 
+// ValueOrRangeList is a format acceptable by iptables in which
+// single values are denoted by just a number e.g. 1000
+// multiple values (lists) are denoted by a number separated by a comma e.g. 1000,1001
+// ranges are denoted by a colon e.g. 1000:1003 meaning 1000,1001,1002,1003
+// ranges and multiple values can be mixed e.g. 1000,1005:1006 meaning 1000,1005,1006
+type ValueOrRangeList string
+
+type UIDsToPorts struct {
+	Protocol string
+	UIDs     ValueOrRangeList
+	Ports    ValueOrRangeList
+}
+
 // TrafficFlow is a struct for Inbound/Outbound configuration
 type TrafficFlow struct {
-	Enabled       bool
-	Port          uint16
-	PortIPv6      uint16
-	Chain         Chain
-	RedirectChain Chain
-	ExcludePorts  []uint16
-	IncludePorts  []uint16
+	Enabled             bool
+	Port                uint16
+	PortIPv6            uint16
+	Chain               Chain
+	RedirectChain       Chain
+	ExcludePorts        []uint16
+	ExcludePortsForUIDs []UIDsToPorts
+	IncludePorts        []uint16
 }
 
 type DNS struct {
@@ -47,10 +63,19 @@ func (c Chain) GetFullName(prefix string) string {
 }
 
 type Ebpf struct {
-	Enabled            bool
-	InstanceIP         string
-	BPFFSPath          string
+	Enabled    bool
+	InstanceIP string
+	BPFFSPath  string
+	CgroupPath string
+	// The name of network interface which TC ebpf programs should bind to,
+	// when not provided, we'll try to automatically determine it
+	TCAttachIface      string
 	ProgramsSourcePath string
+}
+
+type LogConfig struct {
+	Enabled bool
+	Level   uint16
 }
 
 type Config struct {
@@ -74,6 +99,9 @@ type Config struct {
 	// DryRun when set will not execute, but just display instructions which
 	// otherwise would have served to install transparent proxy
 	DryRun bool
+	// Log is the place where configuration for logging iptables rules will
+	// be placed
+	Log LogConfig
 }
 
 // ShouldDropInvalidPackets is just a convenience function which can be used in
@@ -111,7 +139,7 @@ func (c Config) ShouldConntrackZoneSplit() bool {
 	// skip conntrack related rules and move forward
 	if err := exec.Command("iptables", "-m", "conntrack", "--help").Run(); err != nil {
 		_, _ = fmt.Fprintf(c.RuntimeStdout,
-			"[WARNING] error occured when validating if 'conntrack' iptables "+
+			"[WARNING] error occurred when validating if 'conntrack' iptables "+
 				"module is present. Rules for DNS conntrack zone "+
 				"splitting won't be applied: %s\n", err,
 		)
@@ -163,6 +191,10 @@ func defaultConfig() Config {
 		RuntimeStderr:      os.Stderr,
 		Verbose:            true,
 		DryRun:             false,
+		Log: LogConfig{
+			Enabled: false,
+			Level:   DebugLogLevel,
+		},
 	}
 }
 
@@ -227,6 +259,10 @@ func MergeConfigWithDefaults(cfg Config) Config {
 		result.Redirect.Outbound.IncludePorts = cfg.Redirect.Outbound.IncludePorts
 	}
 
+	if len(cfg.Redirect.Outbound.ExcludePortsForUIDs) > 0 {
+		result.Redirect.Outbound.ExcludePortsForUIDs = cfg.Redirect.Outbound.ExcludePortsForUIDs
+	}
+
 	// .Redirect.DNS
 	result.Redirect.DNS.Enabled = cfg.Redirect.DNS.Enabled
 	result.Redirect.DNS.ConntrackZoneSplit = cfg.Redirect.DNS.ConntrackZoneSplit
@@ -274,6 +310,12 @@ func MergeConfigWithDefaults(cfg Config) Config {
 
 	// .DryRun
 	result.DryRun = cfg.DryRun
+
+	// .Log
+	result.Log.Enabled = cfg.Log.Enabled
+	if result.Log.Level != DebugLogLevel {
+		result.Log.Level = cfg.Log.Level
+	}
 
 	return result
 }

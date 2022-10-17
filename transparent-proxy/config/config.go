@@ -46,12 +46,17 @@ type DNS struct {
 	ResolvConfigPath   string
 }
 
+type VNet struct {
+	Networks []string
+}
+
 type Redirect struct {
 	// NamePrefix is a prefix which will be used go generate chains name
 	NamePrefix string
 	Inbound    TrafficFlow
 	Outbound   TrafficFlow
 	DNS        DNS
+	VNet       VNet
 }
 
 type Chain struct {
@@ -179,6 +184,9 @@ func defaultConfig() Config {
 				ConntrackZoneSplit: true,
 				ResolvConfigPath:   "/etc/resolv.conf",
 			},
+			VNet: VNet{
+				Networks: []string{},
+			},
 		},
 		Ebpf: Ebpf{
 			Enabled:            false,
@@ -275,6 +283,11 @@ func MergeConfigWithDefaults(cfg Config) Config {
 		result.Redirect.DNS.Port = cfg.Redirect.DNS.Port
 	}
 
+	// .Redirect.VNet
+	if len(cfg.Redirect.VNet.Networks) > 0 {
+		result.Redirect.VNet.Networks = cfg.Redirect.VNet.Networks
+	}
+
 	// .Ebpf
 	result.Ebpf.Enabled = cfg.Ebpf.Enabled
 	if cfg.Ebpf.InstanceIP != "" {
@@ -313,7 +326,7 @@ func MergeConfigWithDefaults(cfg Config) Config {
 
 	// .Log
 	result.Log.Enabled = cfg.Log.Enabled
-	if result.Log.Level != DebugLogLevel {
+	if cfg.Log.Level != DebugLogLevel {
 		result.Log.Level = cfg.Log.Level
 	}
 

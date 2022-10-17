@@ -7,39 +7,39 @@ import (
 	. "github.com/kumahq/kuma-net/iptables/parameters"
 )
 
-var _ = Describe("OutInterfaceParameter", func() {
+var _ = Describe("InInterfaceParameter", func() {
 	DescribeTable("should return ",
 		func(iface string, verbose bool, want string) {
 			// when
-			got := OutInterface(iface).Build(verbose)
+			got := InInterface(iface).Build(verbose)
 
 			// then
 			Expect(got).To(Equal(want))
 		},
 		Entry("interface localhost",
 			"localhost", false,
-			"-o localhost",
+			"-i localhost",
 		),
 		Entry("interface localhost - verbose",
 			"localhost", true,
-			"--out-interface localhost",
+			"--in-interface localhost",
 		),
 	)
 	DescribeTable("should return negation ",
 		func(iface string, verbose bool, want string) {
 			// when
-			got := OutInterface(iface).Negate().Build(verbose)
+			got := InInterface(iface).Negate().Build(verbose)
 
 			// then
 			Expect(got).To(Equal(want))
 		},
 		Entry("interface localhost",
 			"localhost", false,
-			"! -o localhost",
+			"! -i localhost",
 		),
 		Entry("interface localhost - verbose",
 			"localhost", true,
-			"! --out-interface localhost",
+			"! --in-interface localhost",
 		),
 	)
 })

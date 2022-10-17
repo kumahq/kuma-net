@@ -10,6 +10,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/vishvananda/netlink"
 
 	"github.com/kumahq/kuma-net/iptables/builder"
 	"github.com/kumahq/kuma-net/iptables/consts"
@@ -1019,6 +1020,183 @@ var _ = Describe("Outbound IPv4 DNS/UDP conntrack zone splitting with specific I
 				lockedPorts = append(lockedPorts, ports...)
 				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
 				entry := Entry(EntryDescription(desc), ports[0])
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv4 DNS/UDP traffic to port 53 from specific input interface", func() {
+	var err error
+	var ns *netns.NetNS
+	var ns2 *netns.NetNS
+
+	BeforeEach(func() {
+		mainLink, peerLink, linkErr := netns.NewLinkPair()
+		Expect(linkErr).To(BeNil())
+
+		ns1Address, addrErr := netlink.ParseAddr("192.168.0.1/24")
+		Expect(addrErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, ns1Address).Build()
+		Expect(err).To(BeNil())
+
+		ns2Address, addrErr := netlink.ParseAddr("192.168.0.2/24")
+		Expect(addrErr).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, ns2Address).Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+		Expect(ns2.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to provided port",
+		func(randomPort uint16) {
+			// given
+			address := udp.GenRandomAddressIPv4(consts.DNSPort)
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					DNS: config.DNS{
+						Enabled:    true,
+						Port:       randomPort,
+						CaptureAll: true,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					// interface name and its network
+					VNet: config.VNet{Networks: []string{"s-peer+:192.168.0.2/16"}},
+				},
+				RuntimeStdout: ioutil.Discard,
+			}
+			serverAddress := fmt.Sprintf(":%d", randomPort)
+			readyC, errC := udp.UnsafeStartUDPServer(ns2, serverAddress, udp.ReplyWithReceivedMsg)
+			Consistently(errC).ShouldNot(Receive())
+			Eventually(readyC).Should(BeClosed())
+
+			// when
+			Eventually(ns2.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// and
+			Eventually(ns.UnsafeExec(func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(&net.UDPAddr{
+					IP:   ns2.SharedLinkAddress().IP,
+					Port: int(consts.DNSPort),
+				}, address)).
+					To(Equal(address.String()))
+			})).Should(BeClosed())
+
+			// then
+			Consistently(errC).ShouldNot(Receive())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			lockedPorts := []uint16{consts.DNSPort}
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(1, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
+				entry := Entry(EntryDescription(desc), randomPorts[0])
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv6 DNS/UDP traffic to port 53 from specific input interface", func() {
+	var err error
+	var ns *netns.NetNS
+	var ns2 *netns.NetNS
+
+	BeforeEach(func() {
+		mainLink, peerLink, linkErr := netns.NewLinkPair()
+		Expect(linkErr).To(BeNil())
+
+		ns1Address, addrErr := netlink.ParseAddr("fd00::10:1:1/64")
+		Expect(addrErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(mainLink, ns1Address).Build()
+		Expect(err).To(BeNil())
+
+		ns2Address, addrErr := netlink.ParseAddr("fd00::10:1:2/64")
+		Expect(addrErr).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(peerLink, ns2Address).Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+		Expect(ns2.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to provided port",
+		func(randomPort uint16) {
+			// given
+			address := udp.GenRandomAddressIPv6(consts.DNSPort)
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					DNS: config.DNS{
+						Enabled:    true,
+						Port:       randomPort,
+						CaptureAll: true,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					// interface name and its network
+					VNet: config.VNet{Networks: []string{"s-peer+:fd00::10:1:2/64"}},
+				},
+				IPv6:          true,
+				RuntimeStdout: ioutil.Discard,
+			}
+			serverAddress := fmt.Sprintf(":%d", randomPort)
+			readyC, errC := udp.UnsafeStartUDPServer(ns2, serverAddress, udp.ReplyWithReceivedMsg)
+			Consistently(errC).ShouldNot(Receive())
+			Eventually(readyC).Should(BeClosed())
+
+			// when
+			Eventually(ns2.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// and
+			Eventually(ns.UnsafeExec(func() {
+				Expect(udp.DialUDPAddrWithHelloMsgAndGetReply(&net.UDPAddr{
+					IP:   ns2.SharedLinkAddress().IP,
+					Port: int(consts.DNSPort),
+				}, address)).
+					To(Equal(address.String()))
+			})).Should(BeClosed())
+
+			// then
+			Consistently(errC).ShouldNot(Receive())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			lockedPorts := []uint16{consts.DNSPort}
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(1, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, from port %d", consts.DNSPort)
+				entry := Entry(EntryDescription(desc), randomPorts[0])
 				entries = append(entries, entry)
 			}
 

@@ -19,11 +19,11 @@ var suffixes = map[uint8]map[uint8]struct{}{}
 func newVeth(nameSeed string, suffixA, suffixB uint8) *netlink.Veth {
 	suffix := fmt.Sprintf("-%d%d", suffixA, suffixB)
 	la := netlink.NewLinkAttrs()
-	la.Name = fmt.Sprintf("%smain%s", nameSeed, suffix)
+	la.Name = fmt.Sprintf("%sm%s", nameSeed, suffix)
 
 	return &netlink.Veth{
 		LinkAttrs: la,
-		PeerName:  fmt.Sprintf("%speer%s", nameSeed, suffix),
+		PeerName: fmt.Sprintf("%sp%s", nameSeed, suffix),
 	}
 }
 

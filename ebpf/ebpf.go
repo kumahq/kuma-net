@@ -49,8 +49,8 @@ const (
 var programs = []*Program{
 	{
 		Name:  "mb_connect",
-		Flags: cgroupFlags,
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Flags: CgroupFlags,
+		Cleanup: CleanPathsRelativeToBPFFS(
 			"connect", // directory
 			MapRelativePathCookieOrigDst,
 			MapRelativePathNetNSPodIPs,
@@ -60,8 +60,8 @@ var programs = []*Program{
 	},
 	{
 		Name:  "mb_sockops",
-		Flags: cgroupFlags,
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Flags: CgroupFlags,
+		Cleanup: CleanPathsRelativeToBPFFS(
 			"sockops",
 			MapRelativePathCookieOrigDst,
 			MapRelativePathProcessIP,
@@ -71,40 +71,40 @@ var programs = []*Program{
 	},
 	{
 		Name:  "mb_get_sockopts",
-		Flags: cgroupFlags,
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Flags: CgroupFlags,
+		Cleanup: CleanPathsRelativeToBPFFS(
 			"get_sockopts",
 			MapRelativePathPairOrigDst,
 		),
 	},
 	{
 		Name:  "mb_sendmsg",
-		Flags: cgroupFlags,
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Flags: CgroupFlags,
+		Cleanup: CleanPathsRelativeToBPFFS(
 			"sendmsg",
 			MapRelativePathCookieOrigDst,
 		),
 	},
 	{
 		Name:  "mb_recvmsg",
-		Flags: cgroupFlags,
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Flags: CgroupFlags,
+		Cleanup: CleanPathsRelativeToBPFFS(
 			"recvmsg",
 			MapRelativePathCookieOrigDst,
 		),
 	},
 	{
 		Name:  "mb_redir",
-		Flags: flags(nil),
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Flags: Flags(nil),
+		Cleanup: CleanPathsRelativeToBPFFS(
 			"redir",
 			MapRelativePathSockPairMap,
 		),
 	},
 	{
 		Name:  "mb_netns_cleanup",
-		Flags: flags(nil),
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Flags: Flags(nil),
+		Cleanup: CleanPathsRelativeToBPFFS(
 			"netns_cleanup_prog",
 			"netns_cleanup_link",
 			MapRelativePathNetNSPodIPs,
@@ -121,17 +121,17 @@ var programs = []*Program{
 			var err error
 			var iface string
 
-			if cfg.Ebpf.TCAttachIface != "" && ifaceIsUp(cfg.Ebpf.TCAttachIface) {
+			if cfg.Ebpf.TCAttachIface != "" && InterfaceIsUp(cfg.Ebpf.TCAttachIface) {
 				iface = cfg.Ebpf.TCAttachIface
-			} else if iface, err = getNonLoopbackRunningInterface(); err != nil {
+			} else if iface, err = GetNonLoopbackRunningInterface(); err != nil {
 				return nil, fmt.Errorf("getting non-loopback interface failed: %v", err)
 			}
 
-			return flags(map[string]string{
+			return Flags(map[string]string{
 				"--iface": iface,
 			})(cfg, cgroup, bpffs)
 		},
-		Cleanup: cleanPathsRelativeToBPFFS(
+		Cleanup: CleanPathsRelativeToBPFFS(
 			MapRelativePathLocalPodIPs,
 			MapRelativePathPairOrigDst,
 		),

@@ -14,7 +14,7 @@ import (
 	"github.com/kumahq/kuma-net/transparent-proxy/config"
 )
 
-func getNonLoopbackRunningInterface() (string, error) {
+func GetNonLoopbackRunningInterface() (string, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return "", fmt.Errorf("failed to list network interfaces: %v", err)
@@ -29,7 +29,7 @@ func getNonLoopbackRunningInterface() (string, error) {
 	return "", fmt.Errorf("cannot find other than loopback interface")
 }
 
-func ifaceIsUp(ifName string) bool {
+func InterfaceIsUp(ifName string) bool {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return false

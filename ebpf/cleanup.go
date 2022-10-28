@@ -23,7 +23,7 @@ func buildOptionSet(rawOptions string) map[string]struct{} {
 	return options
 }
 
-func cleanPathsRelativeToBPFFS(paths ...string) func(cfg config.Config) error {
+func CleanPathsRelativeToBPFFS(paths ...string) func(cfg config.Config) error {
 	return func(cfg config.Config) error {
 		for _, p := range paths {
 			if err := os.RemoveAll(path.Join(cfg.Ebpf.BPFFSPath, p)); err != nil {

@@ -102,16 +102,6 @@ var programs = []*Program{
 		),
 	},
 	{
-		Name:  "mb_netns_cleanup",
-		Flags: flags(nil),
-		Cleanup: cleanPathsRelativeToBPFFS(
-			"netns_cleanup_prog",
-			"netns_cleanup_link",
-			MapRelativePathNetNSPodIPs,
-			MapRelativePathLocalPodIPs,
-		),
-	},
-	{
 		Name: "mb_tc",
 		Flags: func(
 			cfg config.Config,

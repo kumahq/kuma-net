@@ -38,7 +38,7 @@ func CleanPathsRelativeToBPFFS(paths ...string) func(cfg config.Config) error {
 	}
 }
 
-func Cleanup(cfg config.Config) (string, error) {
+func UnloadEbpfPrograms(programs []*Program, cfg config.Config) (string, error) {
 	if os.Getuid() != 0 {
 		return "", fmt.Errorf("root user in required for this process or container")
 	}
@@ -76,4 +76,8 @@ func Cleanup(cfg config.Config) (string, error) {
 	}
 
 	return "", nil
+}
+
+func Cleanup(cfg config.Config) (string, error) {
+	return UnloadEbpfPrograms(programs, cfg)
 }

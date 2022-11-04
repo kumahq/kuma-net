@@ -46,4 +46,4 @@ RUN rm -rf /app/bpf/mb_*.*
 FROM scratch
 
 COPY --from=builder /app/bpf/.output/bpftool/bpftool /
-COPY --from=builder /app/bpf/mb_* /bpf/
+COPY --from=builder /app/bpf/mb_* /ebpf/

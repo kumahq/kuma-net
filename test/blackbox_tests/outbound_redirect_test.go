@@ -970,3 +970,185 @@ var _ = Describe("Outbound IPv6 TCP traffic to any address:port except ports exc
 		}(),
 	)
 })
+
+var _ = Describe("Outbound IPv4 TCP traffic from specific interface to other ip than excluded", func() {
+	var err error
+	var ns *netns.NetNS
+	var ns2 *netns.NetNS
+
+	BeforeEach(func() {
+		mainLink, peerLink, linkErr := netns.NewLinkPair()
+		Expect(linkErr).To(BeNil())
+
+		ns1Address, addrErr := netlink.ParseAddr("192.168.0.1/24")
+		Expect(addrErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithSharedLink(mainLink, ns1Address).Build()
+		Expect(err).To(BeNil())
+
+		ns2Address, addrErr := netlink.ParseAddr("192.168.0.2/24")
+		Expect(addrErr).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().WithSharedLink(peerLink, ns2Address).Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+		Expect(ns2.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to outbound port",
+		func(serverPort, randomPort uint16) {
+			// given
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+						Port:    serverPort,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					VNet: config.VNet{
+						Networks: []string{"s-peer+:192.168.0.1/32"},
+					},
+				},
+				RuntimeStdout: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns2,
+				fmt.Sprintf(":%d", serverPort),
+				tcp.ReplyWithOriginalDstIPv4,
+				tcp.CloseConn,
+			)
+			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
+
+			// when
+			Eventually(ns2.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				Expect(tcp.DialIPWithPortAndGetReply(ns2.SharedLinkAddress().IP, randomPort)).
+					To(Equal(fmt.Sprintf("%s:%d", ns2.SharedLinkAddress().IP.String(), randomPort)))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
+
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			var lockedPorts []uint16
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, random port: %%d")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+				)
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})
+
+var _ = Describe("Outbound IPv6 TCP traffic from specific interface to other ip than excluded", func() {
+	var err error
+	var ns *netns.NetNS
+	var ns2 *netns.NetNS
+
+	BeforeEach(func() {
+		mainLink, peerLink, linkErr := netns.NewLinkPair()
+		Expect(linkErr).To(BeNil())
+
+		ns1Address, addrErr := netlink.ParseAddr("fd00::10:1:1/64")
+		Expect(addrErr).To(BeNil())
+		ns, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(mainLink, ns1Address).Build()
+		Expect(err).To(BeNil())
+
+		ns2Address, addrErr := netlink.ParseAddr("fd00::10:1:2/64")
+		Expect(addrErr).To(BeNil())
+		ns2, err = netns.NewNetNSBuilder().WithIPv6(true).WithSharedLink(peerLink, ns2Address).Build()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		Expect(ns.Cleanup()).To(Succeed())
+		Expect(ns2.Cleanup()).To(Succeed())
+	})
+
+	DescribeTable("should be redirected to outbound port",
+		func(serverPort, randomPort uint16) {
+			// given
+			tproxyConfig := config.Config{
+				Redirect: config.Redirect{
+					Outbound: config.TrafficFlow{
+						Enabled: true,
+						Port:    serverPort,
+					},
+					Inbound: config.TrafficFlow{
+						Enabled: true,
+					},
+					VNet: config.VNet{
+						Networks: []string{"s-peer+:fd00::10:1:1/128"},
+					},
+				},
+				IPv6:          true,
+				RuntimeStdout: ioutil.Discard,
+			}
+
+			tcpReadyC, tcpErrC := tcp.UnsafeStartTCPServer(
+				ns2,
+				fmt.Sprintf(":%d", serverPort),
+				tcp.ReplyWithOriginalDstIPv6,
+				tcp.CloseConn,
+			)
+			Eventually(tcpReadyC).Should(BeClosed())
+			Consistently(tcpErrC).ShouldNot(Receive())
+
+			// when
+			Eventually(ns2.UnsafeExec(func() {
+				Expect(builder.RestoreIPTables(tproxyConfig)).Error().To(Succeed())
+			})).Should(BeClosed())
+
+			// then
+			Eventually(ns.UnsafeExec(func() {
+				Expect(tcp.DialIPWithPortAndGetReply(ns2.SharedLinkAddress().IP, randomPort)).
+					To(Equal(fmt.Sprintf("[%s]:%d", ns2.SharedLinkAddress().IP.String(), randomPort)))
+			})).Should(BeClosed())
+
+			// then
+			Eventually(tcpErrC).Should(BeClosed())
+		},
+		func() []TableEntry {
+			var entries []TableEntry
+			var lockedPorts []uint16
+
+			for i := 0; i < blackbox_tests.TestCasesAmount; i++ {
+				randomPorts := socket.GenerateRandomPortsSlice(2, lockedPorts...)
+				// This gives us more entropy as all generated ports will be
+				// different from each other
+				lockedPorts = append(lockedPorts, randomPorts...)
+				desc := fmt.Sprintf("to port %%d, random port: %%d")
+				entry := Entry(
+					EntryDescription(desc),
+					randomPorts[0],
+					randomPorts[1],
+				)
+				entries = append(entries, entry)
+			}
+
+			return entries
+		}(),
+	)
+})

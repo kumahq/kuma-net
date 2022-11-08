@@ -268,9 +268,8 @@ func addPreroutingRules(cfg config.Config, nat *table.NatTable, ipv6 bool) error
 			if err != nil {
 				return fmt.Errorf("incorrect CIDR definition: %s", err)
 			}
-			if ipv6 && ipAddress.To4() == nil {
-				interfaceAndCidr[pair[0]] = pair[1]
-			} else if !ipv6 && ipAddress.To4() != nil {
+			// if is ipv6 and address is ipv6 or is ipv4 and address is ipv4
+			if (ipv6 && ipAddress.To4() == nil) || (!ipv6 && ipAddress.To4() != nil) {
 				interfaceAndCidr[pair[0]] = pair[1]
 			}
 		}

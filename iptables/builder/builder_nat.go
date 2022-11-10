@@ -263,7 +263,7 @@ func addPreroutingRules(cfg config.Config, nat *table.NatTable, ipv6 bool) error
 			// we accept only first : so in case of IPv6 there should be no problem with parsing
 			pair := strings.SplitN(cfg.Redirect.VNet.Networks[i], ":", 2)
 			if len(pair) < 2 {
-				return fmt.Errorf("incorrect definiton of virtual network: %s", cfg.Redirect.VNet.Networks[i])
+				return fmt.Errorf("incorrect definition of virtual network: %s", cfg.Redirect.VNet.Networks[i])
 			}
 			ipAddress, _, err := net.ParseCIDR(pair[1])
 			if err != nil {

@@ -250,6 +250,7 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 
 func addPreroutingRules(cfg config.Config, nat *table.NatTable, ipv6 bool) error {
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(cfg.Redirect.NamePrefix)
+	var rulePosition = 1
 	if cfg.Log.Enabled {
 		nat.Prerouting().Append(
 			Jump(Log(PreroutingLogPrefix, cfg.Log.Level)),
@@ -274,25 +275,34 @@ func addPreroutingRules(cfg config.Config, nat *table.NatTable, ipv6 bool) error
 			}
 		}
 		for iface, cidr := range interfaceAndCidr {
-			nat.Prerouting().Append(
+			nat.Prerouting().Insert(
+				rulePosition,
 				InInterface(iface),
 				Match(MatchUdp()),
 				Protocol(Udp(DestinationPort(DNSPort))),
 				Jump(ToPort(cfg.Redirect.DNS.Port)),
 			)
-
-			nat.Prerouting().Append(
+			rulePosition += 1
+			nat.Prerouting().Insert(
+				rulePosition,
 				NotDestination(cidr),
 				InInterface(iface),
 				Protocol(Tcp()),
 				Jump(ToPort(cfg.Redirect.Outbound.Port)),
 			)
+			rulePosition += 1
 		}
+		nat.Prerouting().Insert(
+			rulePosition,
+			Protocol(Tcp()),
+			Jump(ToUserDefinedChain(inboundChainName)),
+		)
+	} else {
+		nat.Prerouting().Append(
+			Protocol(Tcp()),
+			Jump(ToUserDefinedChain(inboundChainName)),
+		)
 	}
-	nat.Prerouting().Append(
-		Protocol(Tcp()),
-		Jump(ToUserDefinedChain(inboundChainName)),
-	)
 	return nil
 }
 

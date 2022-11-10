@@ -20,6 +20,12 @@ func (b *Chain) Append(parameters ...*Parameter) *Chain {
 	return b
 }
 
+func (b *Chain) Insert(position int, parameters ...*Parameter) *Chain {
+	b.commands = append(b.commands, commands.Insert(b.name, position, parameters))
+
+	return b
+}
+
 func (b *Chain) AppendIf(predicate func() bool, parameters ...*Parameter) *Chain {
 	if predicate() {
 		return b.Append(parameters...)

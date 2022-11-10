@@ -250,7 +250,7 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 
 func addPreroutingRules(cfg config.Config, nat *table.NatTable, ipv6 bool) error {
 	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(cfg.Redirect.NamePrefix)
-	var rulePosition = 1
+	rulePosition := 1
 	if cfg.Log.Enabled {
 		nat.Prerouting().Append(
 			Jump(Log(PreroutingLogPrefix, cfg.Log.Level)),

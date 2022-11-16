@@ -10,7 +10,7 @@ require (
 	github.com/onsi/gomega v1.19.0
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/sys v0.2.0
 )
 
 require (

@@ -2,6 +2,8 @@ package builder
 
 import (
 	"fmt"
+	"net"
+	"strings"
 
 	. "github.com/kumahq/kuma-net/iptables/chain"
 	. "github.com/kumahq/kuma-net/iptables/consts"
@@ -246,6 +248,64 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 	return nil
 }
 
+func addPreroutingRules(cfg config.Config, nat *table.NatTable, ipv6 bool) error {
+	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(cfg.Redirect.NamePrefix)
+	rulePosition := 1
+	if cfg.Log.Enabled {
+		nat.Prerouting().Append(
+			Jump(Log(PreroutingLogPrefix, cfg.Log.Level)),
+		)
+	}
+
+	if len(cfg.Redirect.VNet.Networks) > 0 {
+		interfaceAndCidr := map[string]string{}
+		for i := 0; i < len(cfg.Redirect.VNet.Networks); i++ {
+			// we accept only first : so in case of IPv6 there should be no problem with parsing
+			pair := strings.SplitN(cfg.Redirect.VNet.Networks[i], ":", 2)
+			if len(pair) < 2 {
+				return fmt.Errorf("incorrect definition of virtual network: %s", cfg.Redirect.VNet.Networks[i])
+			}
+			ipAddress, _, err := net.ParseCIDR(pair[1])
+			if err != nil {
+				return fmt.Errorf("incorrect CIDR definition: %s", err)
+			}
+			// if is ipv6 and address is ipv6 or is ipv4 and address is ipv4
+			if (ipv6 && ipAddress.To4() == nil) || (!ipv6 && ipAddress.To4() != nil) {
+				interfaceAndCidr[pair[0]] = pair[1]
+			}
+		}
+		for iface, cidr := range interfaceAndCidr {
+			nat.Prerouting().Insert(
+				rulePosition,
+				InInterface(iface),
+				Match(MatchUdp()),
+				Protocol(Udp(DestinationPort(DNSPort))),
+				Jump(ToPort(cfg.Redirect.DNS.Port)),
+			)
+			rulePosition += 1
+			nat.Prerouting().Insert(
+				rulePosition,
+				NotDestination(cidr),
+				InInterface(iface),
+				Protocol(Tcp()),
+				Jump(ToPort(cfg.Redirect.Outbound.Port)),
+			)
+			rulePosition += 1
+		}
+		nat.Prerouting().Insert(
+			rulePosition,
+			Protocol(Tcp()),
+			Jump(ToUserDefinedChain(inboundChainName)),
+		)
+	} else {
+		nat.Prerouting().Append(
+			Protocol(Tcp()),
+			Jump(ToUserDefinedChain(inboundChainName)),
+		)
+	}
+	return nil
+}
+
 func buildNatTable(
 	cfg config.Config,
 	dnsServers []string,
@@ -254,21 +314,13 @@ func buildNatTable(
 ) (*table.NatTable, error) {
 	prefix := cfg.Redirect.NamePrefix
 	inboundRedirectChainName := cfg.Redirect.Inbound.RedirectChain.GetFullName(prefix)
-	inboundChainName := cfg.Redirect.Inbound.Chain.GetFullName(prefix)
 	nat := table.Nat()
-
-	if cfg.Log.Enabled {
-		nat.Prerouting().Append(
-			Jump(Log(PreroutingLogPrefix, cfg.Log.Level)),
-		)
-	}
-	nat.Prerouting().Append(
-		Protocol(Tcp()),
-		Jump(ToUserDefinedChain(inboundChainName)),
-	)
 
 	if err := addOutputRules(cfg, dnsServers, nat); err != nil {
 		return nil, fmt.Errorf("could not add output rules %s", err)
+	}
+	if err := addPreroutingRules(cfg, nat, ipv6); err != nil {
+		return nil, fmt.Errorf("could not add prerouting rules %s", err)
 	}
 
 	// MESH_INBOUND

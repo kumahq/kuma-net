@@ -235,7 +235,7 @@ func getBpffsPath(cfg config.Config) (string, error) {
 	return mounts[0].Mountpoint, nil
 }
 
-func flags(flags map[string]string) FlagGenerator {
+func Flags(flags map[string]string) FlagGenerator {
 	return func(cfg config.Config, _ string, bpffs string) ([]string, error) {
 		f := map[string]string{
 			"--bpffs": bpffs,
@@ -253,12 +253,12 @@ func flags(flags map[string]string) FlagGenerator {
 	}
 }
 
-func cgroupFlags(
+func CgroupFlags(
 	cfg config.Config,
 	cgroup string,
 	bpffs string,
 ) ([]string, error) {
-	return flags(map[string]string{
+	return Flags(map[string]string{
 		"--cgroup": cgroup,
 	})(cfg, cgroup, bpffs)
 }

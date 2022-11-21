@@ -5,6 +5,7 @@ package ebpf
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -48,8 +49,20 @@ const (
 
 var programs = []*Program{
 	{
-		Name:  "mb_connect",
-		Flags: CgroupFlags,
+		Name: "mb_connect",
+		Flags: func(
+			cfg config.Config,
+			cgroup string,
+			bpffs string,
+		) ([]string, error) {
+			return Flags(map[string]string{
+				"--cgroup":            cgroup,
+				"--sidecar-user-id":   cfg.Owner.UID,
+				"--out-redirect-port": strconv.Itoa(int(cfg.Redirect.Outbound.Port)),
+				"--in-redirect-port":  strconv.Itoa(int(cfg.Redirect.Inbound.Port)),
+				"--dns-capture-port":  strconv.Itoa(int(cfg.Redirect.DNS.Port)),
+			})(cfg, cgroup, bpffs)
+		},
 		Cleanup: CleanPathsRelativeToBPFFS(
 			"connect", // directory
 			MapRelativePathCookieOrigDst,
@@ -59,8 +72,18 @@ var programs = []*Program{
 		),
 	},
 	{
-		Name:  "mb_sockops",
-		Flags: CgroupFlags,
+		Name: "mb_sockops",
+		Flags: func(
+			cfg config.Config,
+			cgroup string,
+			bpffs string,
+		) ([]string, error) {
+			return Flags(map[string]string{
+				"--cgroup":            cgroup,
+				"--out-redirect-port": strconv.Itoa(int(cfg.Redirect.Outbound.Port)),
+				"--in-redirect-port":  strconv.Itoa(int(cfg.Redirect.Inbound.Port)),
+			})(cfg, cgroup, bpffs)
+		},
 		Cleanup: CleanPathsRelativeToBPFFS(
 			"sockops",
 			MapRelativePathCookieOrigDst,
@@ -78,16 +101,37 @@ var programs = []*Program{
 		),
 	},
 	{
-		Name:  "mb_sendmsg",
-		Flags: CgroupFlags,
+		Name: "mb_sendmsg",
+		Flags: func(
+			cfg config.Config,
+			cgroup string,
+			bpffs string,
+		) ([]string, error) {
+			return Flags(map[string]string{
+				"--cgroup":            cgroup,
+				"--sidecar-user-id":   cfg.Owner.UID,
+				"--out-redirect-port": strconv.Itoa(int(cfg.Redirect.Outbound.Port)),
+				"--dns-capture-port":  strconv.Itoa(int(cfg.Redirect.DNS.Port)),
+			})(cfg, cgroup, bpffs)
+		},
 		Cleanup: CleanPathsRelativeToBPFFS(
 			"sendmsg",
 			MapRelativePathCookieOrigDst,
 		),
 	},
 	{
-		Name:  "mb_recvmsg",
-		Flags: CgroupFlags,
+		Name: "mb_recvmsg",
+		Flags: func(
+			cfg config.Config,
+			cgroup string,
+			bpffs string,
+		) ([]string, error) {
+			return Flags(map[string]string{
+				"--cgroup":            cgroup,
+				"--out-redirect-port": strconv.Itoa(int(cfg.Redirect.Outbound.Port)),
+				"--dns-capture-port":  strconv.Itoa(int(cfg.Redirect.DNS.Port)),
+			})(cfg, cgroup, bpffs)
+		},
 		Cleanup: CleanPathsRelativeToBPFFS(
 			"recvmsg",
 			MapRelativePathCookieOrigDst,
@@ -118,7 +162,8 @@ var programs = []*Program{
 			}
 
 			return Flags(map[string]string{
-				"--iface": iface,
+				"--iface":            iface,
+				"--in-redirect-port": strconv.Itoa(int(cfg.Redirect.Inbound.Port)),
 			})(cfg, cgroup, bpffs)
 		},
 		Cleanup: CleanPathsRelativeToBPFFS(

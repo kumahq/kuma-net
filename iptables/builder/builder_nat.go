@@ -215,7 +215,8 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 			return fmt.Errorf("unknown protocol %s, only 'tcp' or 'udp' allowed", uIDsToPorts.Protocol)
 		}
 
-		nat.Output().Insert(rulePosition,
+		nat.Output().Insert(
+			rulePosition,
 			protocol,
 			Match(Owner(UidRangeOrValue(uIDsToPorts))),
 			Jump(Return()),

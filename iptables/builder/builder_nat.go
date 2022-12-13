@@ -238,7 +238,6 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 				Protocol(Udp(DestinationPort(DNSPort))),
 				Jump(ToPort(dnsRedirectPort)),
 			)
-			rulePosition++
 		} else {
 			for _, dnsIp := range dnsServers {
 				nat.Output().Insert(

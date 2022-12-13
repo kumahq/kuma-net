@@ -193,10 +193,13 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 	outboundChainName := cfg.Redirect.Outbound.Chain.GetFullName(cfg.Redirect.NamePrefix)
 	dnsRedirectPort := cfg.Redirect.DNS.Port
 	uid := cfg.Owner.UID
+	rulePosition := 1
 	if cfg.Log.Enabled {
-		nat.Output().Append(
+		nat.Output().Insert(
+			rulePosition,
 			Jump(Log(OutputLogPrefix, cfg.Log.Level)),
 		)
+		rulePosition++
 	}
 
 	// Excluded outbound ports for UIDs
@@ -212,31 +215,38 @@ func addOutputRules(cfg config.Config, dnsServers []string, nat *table.NatTable)
 			return fmt.Errorf("unknown protocol %s, only 'tcp' or 'udp' allowed", uIDsToPorts.Protocol)
 		}
 
-		nat.Output().Append(
+		nat.Output().Insert(rulePosition,
 			protocol,
 			Match(Owner(UidRangeOrValue(uIDsToPorts))),
 			Jump(Return()),
 		)
+		rulePosition++
 	}
 
 	if cfg.ShouldRedirectDNS() {
-		nat.Output().Append(
+		nat.Output().Insert(
+			rulePosition,
 			Protocol(Udp(DestinationPort(DNSPort))),
 			Match(Owner(Uid(uid))),
 			Jump(Return()),
 		)
+		rulePosition++
 		if cfg.ShouldCaptureAllDNS() {
-			nat.Output().Append(
+			nat.Output().Insert(
+				rulePosition,
 				Protocol(Udp(DestinationPort(DNSPort))),
 				Jump(ToPort(dnsRedirectPort)),
 			)
+			rulePosition++
 		} else {
 			for _, dnsIp := range dnsServers {
-				nat.Output().Append(
+				nat.Output().Insert(
+					rulePosition,
 					Destination(dnsIp),
 					Protocol(Udp(DestinationPort(DNSPort))),
 					Jump(ToPort(dnsRedirectPort)),
 				)
+				rulePosition++
 			}
 		}
 	}
